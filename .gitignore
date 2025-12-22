@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+
+# VSCode
+.vscode/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Coverage and test output
+.coverage
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# OS-specific files
+Thumbs.db
+ehthumbs.db
+Icon?
+.Spotlight-V100
+.Trashes
+
+# Backup and temporary files
+*~
+*.swp
+*.bak
+*.tmp
+
+# Logs
+*.log
+
+# PlantUML/Markdown cache (if any)
+plantuml-cache/
+
+.idea/
