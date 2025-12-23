@@ -27,9 +27,12 @@ interface Component<T> {
 ' BaseChatAgent - the main base class
 abstract class BaseChatAgent {
   +component_type: ClassVar[ComponentType] = 'agent'
-  +name: str
-  +description: str
-  +{abstract} produced_message_types: Sequence[type[BaseChatMessage]]
+  --
+  +__init__(name: str, description: str)
+  --
+  +name: str <<property>>
+  +description: str <<property>>
+  +{abstract} produced_message_types: Sequence[type[BaseChatMessage]] <<property>>
   +{abstract} on_messages(messages, cancellation_token): Response
   +on_messages_stream(messages, cancellation_token): AsyncGenerator
   +run(task, cancellation_token, output_task_messages): TaskResult
@@ -45,22 +48,27 @@ abstract class BaseChatAgent {
 ' Concrete agent implementations
 class AssistantAgent {
   +component_version: ClassVar[int] = 2
-  +component_provider_override: ClassVar[str] = 'autogen_agentchat.agents.AssistantAgent'
-  -_model_client: ChatCompletionClient
-  -_tools: List[BaseTool]
-  -_workbench: Workbench | Sequence[Workbench]
-  -_handoffs: List[Handoff | str]
-  -_model_context: ChatCompletionContext
-  -_system_message: str
-  -_model_client_stream: bool
-  -_reflect_on_tool_use: bool
-  -_max_tool_iterations: int
-  -_tool_call_summary_format: str
-  -_tool_call_summary_formatter: Callable
-  -_output_content_type: type[BaseModel]
-  -_memory: Sequence[Memory]
-  +produced_message_types: Sequence[type[BaseChatMessage]]
-  +model_context: ChatCompletionContext
+  +component_provider_override: ClassVar[str]
+  --
+  +__init__(name: str, model_client: ChatCompletionClient, \\
+    tools: List[BaseTool] = None, \\
+    workbench: Workbench = None, \\
+    handoffs: List[Handoff | str] = None, \\
+    model_context: ChatCompletionContext = None, \\
+    description: str = "...", \\
+    system_message: str = "...", \\
+    model_client_stream: bool = False, \\
+    reflect_on_tool_use: bool = None, \\
+    max_tool_iterations: int = 1, \\
+    tool_call_summary_format: str = "{result}", \\
+    tool_call_summary_formatter: Callable = None, \\
+    output_content_type: type[BaseModel] = None, \\
+    output_content_type_format: str = None, \\
+    memory: Sequence[Memory] = None, \\
+    metadata: Dict[str, str] = None)
+  --
+  +produced_message_types: Sequence[type[BaseChatMessage]] <<property>>
+  +model_context: ChatCompletionContext <<property>>
   +on_messages(messages, cancellation_token): Response
   +on_messages_stream(messages, cancellation_token): AsyncGenerator
   +on_reset(cancellation_token): None
@@ -69,22 +77,26 @@ class AssistantAgent {
 }
 
 class CodeExecutorAgent {
-  +component_provider_override: ClassVar[str] = 'autogen_agentchat.agents.CodeExecutorAgent'
+  +component_provider_override: ClassVar[str]
   +DEFAULT_TERMINAL_DESCRIPTION: str
   +DEFAULT_AGENT_DESCRIPTION: str
   +DEFAULT_SYSTEM_MESSAGE: str
   +NO_CODE_BLOCKS_FOUND_MESSAGE: str
   +DEFAULT_SUPPORTED_LANGUAGES: List[str]
-  -_code_executor: CodeExecutor
-  -_model_client: ChatCompletionClient
-  -_model_context: ChatCompletionContext
-  -_model_client_stream: bool
-  -_max_retries_on_error: int
-  -_sources: Sequence[str]
-  -_supported_languages: List[str]
-  -_approval_func: Callable
-  +produced_message_types: Sequence[type[BaseChatMessage]]
-  +model_context: ChatCompletionContext
+  --
+  +__init__(name: str, code_executor: CodeExecutor, \\
+    model_client: ChatCompletionClient = None, \\
+    model_context: ChatCompletionContext = None, \\
+    model_client_stream: bool = False, \\
+    max_retries_on_error: int = 0, \\
+    description: str = None, \\
+    system_message: str = DEFAULT_SYSTEM_MESSAGE, \\
+    sources: Sequence[str] = None, \\
+    supported_languages: List[str] = None, \\
+    approval_func: Callable = None)
+  --
+  +produced_message_types: Sequence[type[BaseChatMessage]] <<property>>
+  +model_context: ChatCompletionContext <<property>>
   +on_messages(messages, cancellation_token): Response
   +on_messages_stream(messages, cancellation_token): AsyncGenerator
   +extract_code_blocks_from_messages(messages): List[CodeBlock]
