@@ -29,6 +29,367 @@ interface Component<T> {
 
 abstract class ABC
 
+' ============ MODEL CLIENT HIERARCHY ============
+
+interface ChatCompletionClient <<Protocol>> {
+    +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator<str | CreateResult>
+    +{abstract} actual_usage(): RequestUsage
+    +{abstract} total_usage(): RequestUsage
+    +{abstract} count_tokens(messages, tools, json_output): int
+    +{abstract} remaining_tokens(messages, tools, json_output): int
+}
+
+class RequestUsage {
+    +prompt_tokens: int
+    +completion_tokens: int
+    +total_tokens: int
+    +__init__(prompt_tokens, completion_tokens)
+}
+
+class CreateResult {
+    +content: str
+    +finish_reason: str
+    +usage: RequestUsage
+    +cached: bool
+    +logprobs: List | None
+    +__init__(content, finish_reason, usage, cached, logprobs)
+}
+
+abstract class BaseOpenAIChatCompletionClient {
+    +{static} component_type: ClassVar<ComponentType>
+    #_model: str
+    #_api_key: str | None
+    #_base_url: str | None
+    #_timeout: float | None
+    #_max_retries: int
+    #_model_info: ModelInfo
+    #_client: AsyncOpenAI
+    +__init__(model, api_key, base_url, timeout, max_retries, model_info, ...)
+    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    +actual_usage(): RequestUsage
+    +total_usage(): RequestUsage
+    +count_tokens(messages, tools, json_output): int
+    +remaining_tokens(messages, tools, json_output): int
+    +close(): None
+}
+
+class OpenAIChatCompletionClient {
+    +{static} component_version: ClassVar<int>
+    +{static} component_provider_override: ClassVar<str>
+    +__init__(model, api_key, organization, base_url, timeout, max_retries, model_info, ...)
+    +_to_config(): OpenAIClientConfigurationConfigModel
+    +_from_config(config): Self
+}
+
+class AzureOpenAIChatCompletionClient {
+    +{static} component_version: ClassVar<int>
+    +{static} component_provider_override: ClassVar<str>
+    #_azure_deployment: str
+    #_azure_endpoint: str
+    #_api_version: str
+    #_azure_ad_token_provider: Callable | None
+    +__init__(azure_deployment, model, azure_endpoint, api_version, api_key, azure_ad_token_provider, ...)
+    +_to_config(): AzureOpenAIClientConfigurationConfigModel
+    +_from_config(config): Self
+}
+
+abstract class BaseAnthropicChatCompletionClient {
+    +{static} component_type: ClassVar<ComponentType>
+    #_model: str
+    #_api_key: str | None
+    #_base_url: str | None
+    #_timeout: float
+    #_max_tokens: int
+    #_temperature: float
+    #_client: AsyncAnthropic
+    +__init__(model, api_key, base_url, timeout, max_tokens, temperature, ...)
+    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    +actual_usage(): RequestUsage
+    +total_usage(): RequestUsage
+    +count_tokens(messages, tools, json_output): int
+    +remaining_tokens(messages, tools, json_output): int
+    +close(): None
+}
+
+class AnthropicChatCompletionClient {
+    +{static} component_version: ClassVar<int>
+    +{static} component_provider_override: ClassVar<str>
+    +__init__(model, api_key, max_tokens, temperature, ...)
+    +_to_config(): AnthropicClientConfigurationConfigModel
+    +_from_config(config): Self
+}
+
+class AnthropicBedrockChatCompletionClient {
+    +{static} component_version: ClassVar<int>
+    +{static} component_provider_override: ClassVar<str>
+    #_aws_region: str
+    #_aws_access_key_id: str | None
+    #_aws_secret_access_key: str | None
+    +__init__(model, aws_region, aws_access_key_id, aws_secret_access_key, ...)
+    +_to_config(): AnthropicBedrockClientConfigurationConfigModel
+    +_from_config(config): Self
+}
+
+abstract class BaseOllamaChatCompletionClient {
+    +{static} component_type: ClassVar<ComponentType>
+    #_model: str
+    #_host: str
+    #_timeout: float | None
+    #_response_format: type | None
+    #_client: AsyncClient
+    +__init__(model, host, timeout, response_format, ...)
+    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    +actual_usage(): RequestUsage
+    +total_usage(): RequestUsage
+    +count_tokens(messages, tools, json_output): int
+    +remaining_tokens(messages, tools, json_output): int
+    +close(): None
+}
+
+class OllamaChatCompletionClient {
+    +{static} component_version: ClassVar<int>
+    +{static} component_provider_override: ClassVar<str>
+    +__init__(model, host, timeout, response_format, ...)
+    +_to_config(): BaseOllamaClientConfigurationConfigModel
+    +_from_config(config): Self
+}
+
+class SKChatCompletionAdapter {
+    +{static} component_type: ClassVar<ComponentType>
+    #_sk_client: ChatCompletionClientBase
+    #_kernel: Kernel | None
+    #_prompt_settings: PromptExecutionSettings | None
+    #_model_info: ModelInfo
+    #_service_id: str | None
+    +__init__(sk_client, kernel, prompt_settings, model_info, service_id)
+    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    +actual_usage(): RequestUsage
+    +total_usage(): RequestUsage
+    +count_tokens(messages, tools, json_output): int
+    +remaining_tokens(messages, tools, json_output): int
+}
+
+class ChatCompletionCache {
+    +{static} component_type: ClassVar<ComponentType>
+    #_client: ChatCompletionClient
+    #_cache_store: CacheStore
+    +__init__(client, cache_store)
+    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    +actual_usage(): RequestUsage
+    +total_usage(): RequestUsage
+    +count_tokens(messages, tools, json_output): int
+    +remaining_tokens(messages, tools, json_output): int
+    +close(): None
+}
+
+ChatCompletionClient <|.. BaseOpenAIChatCompletionClient
+BaseOpenAIChatCompletionClient <|-- OpenAIChatCompletionClient
+BaseOpenAIChatCompletionClient <|-- AzureOpenAIChatCompletionClient
+Component <|.. OpenAIChatCompletionClient
+Component <|.. AzureOpenAIChatCompletionClient
+
+ChatCompletionClient <|.. BaseAnthropicChatCompletionClient
+BaseAnthropicChatCompletionClient <|-- AnthropicChatCompletionClient
+BaseAnthropicChatCompletionClient <|-- AnthropicBedrockChatCompletionClient
+Component <|.. AnthropicChatCompletionClient
+Component <|.. AnthropicBedrockChatCompletionClient
+
+ChatCompletionClient <|.. BaseOllamaChatCompletionClient
+BaseOllamaChatCompletionClient <|-- OllamaChatCompletionClient
+Component <|.. OllamaChatCompletionClient
+
+ChatCompletionClient <|.. SKChatCompletionAdapter
+
+ChatCompletionClient <|.. ChatCompletionCache
+ChatCompletionCache o-- ChatCompletionClient : wraps
+
+ChatCompletionClient ..> CreateResult : produces
+ChatCompletionClient ..> RequestUsage : produces
+
+' ============ LLM MESSAGE TYPES ============
+
+abstract class LLMMessage {
+    +{abstract} content: str | List
+    +role: str
+}
+
+class SystemMessage {
+    +content: str
+    +role: str = "system"
+    +__init__(content: str)
+}
+
+class UserMessage {
+    +content: str | List
+    +role: str = "user"
+    +__init__(content: str | List)
+}
+
+class AssistantMessage {
+    +content: str | None
+    +function_call: FunctionCall | None
+    +tool_calls: List<FunctionCall> | None
+    +role: str = "assistant"
+    +__init__(content, function_call, tool_calls)
+}
+
+class FunctionExecutionResultMessage {
+    +content: str
+    +role: str = "function"
+    +call_id: str
+    +__init__(content: str, call_id: str)
+}
+
+LLMMessage <|-- SystemMessage
+LLMMessage <|-- UserMessage
+LLMMessage <|-- AssistantMessage
+LLMMessage <|-- FunctionExecutionResultMessage
+
+' ============ TOOL HIERARCHY ============
+
+abstract class BaseTool {
+    +{abstract} name: str
+    +{abstract} description: str
+    +{abstract} args_type: type
+    +{abstract} return_type: type
+    +{abstract} run_json(args: str, cancellation_token): str
+    +{abstract} run(args, cancellation_token): Any
+    +{abstract} to_tool_schema(): ToolSchema
+}
+
+class FunctionTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_func: Callable
+    +__init__(func: Callable, name: str, description: str)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): Any
+    +to_tool_schema(): ToolSchema
+}
+
+class ToolSchema {
+    +name: str
+    +description: str
+    +parameters: Dict
+    +__init__(name, description, parameters)
+}
+
+class FunctionCall {
+    +id: str
+    +name: str
+    +arguments: str
+    +__init__(id, name, arguments)
+}
+
+class FunctionExecutionResult {
+    +content: str
+    +call_id: str
+    +__init__(content: str, call_id: str)
+}
+
+BaseTool <|-- FunctionTool
+BaseTool ..> ToolSchema : creates
+BaseTool ..> FunctionExecutionResult : produces
+
+' ============ CODE EXECUTOR HIERARCHY ============
+
+interface CodeExecutor <<Protocol>> {
+    +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
+    +{abstract} restart(): None
+    +{abstract} stop(): None
+}
+
+class LocalCommandLineCodeExecutor {
+    #_work_dir: str
+    #_timeout: int
+    #_virtual_env: str | None
+    +__init__(work_dir, timeout, virtual_env)
+    +execute_code_blocks(code_blocks, cancellation_token): CodeResult
+    +restart(): None
+    +stop(): None
+}
+
+class DockerCommandLineCodeExecutor {
+    #_image: str
+    #_container_name: str
+    #_timeout: int
+    #_work_dir: str
+    #_auto_remove: bool
+    +__init__(image, container_name, timeout, work_dir, auto_remove)
+    +execute_code_blocks(code_blocks, cancellation_token): CodeResult
+    +restart(): None
+    +stop(): None
+}
+
+CodeExecutor <|.. LocalCommandLineCodeExecutor
+CodeExecutor <|.. DockerCommandLineCodeExecutor
+
+' ============ MEMORY HIERARCHY ============
+
+abstract class Memory {
+    +{abstract} add(message: BaseChatMessage): None
+    +{abstract} get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
+    +{abstract} clear(): None
+}
+
+class ChatHistoryMemory {
+    #_max_messages: int | None
+    #_messages: List<BaseChatMessage>
+    +__init__(max_messages: int | None)
+    +add(message: BaseChatMessage): None
+    +get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
+    +clear(): None
+}
+
+class SummaryMemory {
+    #_model_client: ChatCompletionClient
+    #_summary_prompt: str
+    #_summary: str | None
+    #_max_messages: int
+    +__init__(model_client, summary_prompt, max_messages)
+    +add(message: BaseChatMessage): None
+    +get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
+    +clear(): None
+}
+
+Memory <|-- ChatHistoryMemory
+Memory <|-- SummaryMemory
+SummaryMemory o-- ChatCompletionClient : uses
+
+' ============ CHAT COMPLETION CONTEXT ============
+
+class ChatCompletionContext {
+    #_messages: List<LLMMessage>
+    #_max_messages: int | None
+    +__init__(messages: List<LLMMessage>, max_messages: int | None)
+    +add_message(message: LLMMessage): None
+    +get_messages(): List<LLMMessage>
+    +clear(): None
+    +truncate(max_messages: int): None
+}
+
+' ============ WORKBENCH ============
+
+class Workbench {
+    +root_dir: str
+    +working_dir: str
+    +__init__(root_dir: str)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+}
+
 ' ============ BASE AGENT CLASS ============
 
 abstract class BaseChatAgent {
@@ -256,6 +617,20 @@ Component <|.. UserProxyAgent
 
 BaseChatAgent <|-- SocietyOfMindAgent
 Component <|.. SocietyOfMindAgent
+
+' Agent compositions
+AssistantAgent o-- ChatCompletionClient : uses
+AssistantAgent o-- BaseTool : uses
+AssistantAgent o-- Workbench : uses
+AssistantAgent o-- ChatCompletionContext : uses
+AssistantAgent o-- Memory : uses
+
+CodeExecutorAgent o-- CodeExecutor : uses
+CodeExecutorAgent o-- ChatCompletionClient : uses
+CodeExecutorAgent o-- ChatCompletionContext : uses
+
+SocietyOfMindAgent o-- ChatCompletionClient : uses
+SocietyOfMindAgent o-- ChatCompletionContext : uses
 
 ' ============ RESPONSE AND RESULT TYPES ============
 
@@ -486,6 +861,9 @@ Component <|.. Swarm
 BaseGroupChat <|-- MagenticOneGroupChat
 Component <|.. MagenticOneGroupChat
 
+SelectorGroupChat o-- ChatCompletionClient : uses
+MagenticOneGroupChat o-- ChatCompletionClient : uses
+
 ' ============ SUPPORT CLASSES ============
 
 class Handoff {
@@ -517,6 +895,12 @@ class CodeResult {
     +output: str
 }
 
+class Image {
+    +data: bytes
+    +mime_type: str
+    +__init__(data, mime_type)
+}
+
 ' ============ RELATIONSHIPS ============
 
 AssistantAgent ..> Response : produces
@@ -543,5 +927,13 @@ SelectorGroupChat o-- Team : participants
 SelectorGroupChat o-- TerminationCondition : uses
 
 SocietyOfMindAgent o-- Team : uses
+
+MultiModalMessage o-- Image : uses
+
+ChatCompletionClient ..> CreateResult : produces
+ChatCompletionClient ..> RequestUsage : produces
+
+ToolCallMessage o-- FunctionCall : contains
+ToolCallResultMessage o-- FunctionExecutionResult : contains
 
 @enduml
