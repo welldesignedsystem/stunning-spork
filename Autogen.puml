@@ -275,6 +275,81 @@ class FunctionTool {
     +to_tool_schema(): ToolSchema
 }
 
+class AsyncFunctionTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_async_func: Callable
+    #_func_signature: inspect.Signature
+    +__init__(async_func: Callable, name: str, description: str)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): Any
+    +to_tool_schema(): ToolSchema
+}
+' ============ AGENT TOOL ============
+
+class AgentTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_agent: ChatAgent
+    #_can_pass_context: bool
+    #_max_turns: int | None
+    +__init__(agent: ChatAgent, can_pass_context: bool, max_turns: int)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): TaskResult
+    +to_tool_schema(): ToolSchema
+    #_format_result(task_result: TaskResult): str
+}
+
+interface ChatAgent <<Protocol>> {
+    +name: str
+    +description: str
+    +run(task: str, cancellation_token): TaskResult
+}
+
+class TaskResult {
+    +messages: Sequence<BaseChatMessage>
+    +stop_reason: str | None
+    +__init__(messages, stop_reason)
+}
+
+' ============ TEAM TOOL ============
+
+class TeamTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_team: Team
+    #_can_pass_context: bool
+    #_max_turns: int | None
+    #_return_full_history: bool
+    +__init__(team: Team, can_pass_context: bool, max_turns: int, return_full_history: bool)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): TeamTaskResult
+    +to_tool_schema(): ToolSchema
+    #_format_result(task_result: TeamTaskResult): str
+    #_summarize_conversation(messages: List): str
+}
+
+interface Team <<Protocol>> {
+    +name: str
+    +description: str
+    +run(task: str, cancellation_token): TaskResult
+    +run_stream(task: str, cancellation_token): AsyncGenerator
+}
+
+class TeamTaskResult {
+    +messages: Sequence<BaseChatMessage>
+    +stop_reason: str | None
+    +participant_results: Dict<str, TaskResult>
+    +conversation_history: List<BaseChatMessage>
+    +__init__(messages, stop_reason, participant_results, conversation_history)
+}
+
 class MCPTool {
     +name: str
     +description: str
@@ -322,6 +397,10 @@ class FunctionExecutionResult {
 }
 
 BaseTool <|-- FunctionTool
+BaseTool <|-- AsyncFunctionTool
+BaseTool <|-- AgentTool
+BaseTool <|-- TeamTool
+BaseTool <|-- MCPTool
 BaseTool <|-- MCPTool
 BaseTool <|-- WorkbenchTool
 BaseTool ..> ToolSchema : creates
@@ -1279,38 +1358,94 @@ class Image {
 
 ' ============ RELATIONSHIPS ============
 
-AssistantAgent ..> Response : produces
-AssistantAgent ..> TaskResult : produces
-AssistantAgent ..> TextMessage : produces
-AssistantAgent ..> MultiModalMessage : produces
-AssistantAgent ..> StopMessage : produces
-AssistantAgent ..> HandoffMessage : produces
-AssistantAgent ..> ToolCallMessage : produces
-AssistantAgent ..> ToolCallResultMessage : produces
-AssistantAgent o-- Handoff : uses
+BaseTool <|-- FunctionTool
+BaseTool <|-- AsyncFunctionTool
+BaseTool <|-- AgentTool
+BaseTool <|-- TeamTool
+BaseTool <|-- MCPTool
+BaseTool <|-- WorkbenchTool
+BaseTool <|-- CodeExecutionTool
+BaseTool <|-- WebSearchTool
+BaseTool <|-- WebScrapeTool
+BaseTool <|-- APICallTool
+BaseTool <|-- DatabaseQueryTool
+BaseTool <|-- ConditionalTool
+BaseTool <|-- SequentialTool
 
-CodeExecutorAgent ..> ApprovalRequest : uses
-CodeExecutorAgent ..> ApprovalResponse : uses
-CodeExecutorAgent ..> CodeBlock : uses
-CodeExecutorAgent ..> CodeResult : uses
+WorkbenchTool <|-- FileReadTool
+WorkbenchTool <|-- FileWriteTool
+WorkbenchTool <|-- FileListTool
+WorkbenchTool <|-- FileDeleteTool
 
-RoundRobinGroupChat o-- ChatAgent : participants
-RoundRobinGroupChat o-- Team : participants
-RoundRobinGroupChat o-- TerminationCondition : uses
+CodeExecutionTool <|-- PythonCodeExecutionTool
+CodeExecutionTool <|-- BashCodeExecutionTool
 
-SelectorGroupChat o-- ChatAgent : participants
-SelectorGroupChat o-- Team : participants
-SelectorGroupChat o-- TerminationCondition : uses
+BaseTool ..> ToolSchema : creates
+BaseTool ..> FunctionExecutionResult : produces
+BaseTool ..> FunctionCall : receives
 
-SocietyOfMindAgent o-- Team : uses
+ToolSchema o-- ToolParameter : contains
 
-MultiModalMessage o-- Image : uses
+AgentTool o-- ChatAgent : wraps
+AgentTool ..> TaskResult : produces
 
-ChatCompletionClient ..> CreateResult : produces
-ChatCompletionClient ..> RequestUsage : produces
+TeamTool o-- Team : wraps
+TeamTool ..> TeamTaskResult : produces
 
-ToolCallMessage o-- FunctionCall : contains
-ToolCallResultMessage o-- FunctionExecutionResult : contains
+MCPTool o-- MCPClient : uses
+MCPTool ..> MCPToolDefinition : uses
+MCPTool ..> MCPToolResult : produces
 
+WorkbenchTool o-- BaseWorkbench : uses
+
+CodeExecutionTool o-- CodeExecutor : uses
+CodeExecutionTool ..> CodeResult : produces
+
+WebSearchTool ..> SearchResult : produces
+
+ToolGroup o-- BaseTool : contains
+ConditionalTool o-- BaseTool : delegates to
+SequentialTool o-- BaseTool : orchestrates
+
+ToolRegistry o-- BaseTool : manages
+ToolDecorator ..> FunctionTool : creates
+ToolDecorator ..> AsyncFunctionTool : creates
+
+note right of AgentTool
+  **AgentTool** wraps a ChatAgent
+  as a tool, enabling agents to
+  delegate tasks to other agents.
+
+  Key features:
+  - Can pass conversation context
+  - Limits max turns
+  - Formats agent output as tool result
+end note
+
+note right of TeamTool
+  **TeamTool** wraps an entire Team
+  (multi-agent collaboration) as a tool.
+
+  Key features:
+  - Delegates complex tasks to teams
+  - Can return full conversation history
+  - Provides summarized results
+  - Tracks individual participant results
+end note
+
+note bottom of ToolGroup
+  **ToolGroup** bundles related tools
+  for organization and discovery
+end note
+
+note bottom of ConditionalTool
+  **ConditionalTool** selects between
+  two tools based on runtime conditions
+end note
+
+note bottom of SequentialTool
+  **SequentialTool** chains multiple
+  tools together in a pipeline
+end note
 
 @enduml
