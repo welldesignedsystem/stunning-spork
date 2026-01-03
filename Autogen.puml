@@ -1,4 +1,4 @@
-@startuml AutoGen_Corrected_Architecture
+@startuml Agent_Framework
 
 ' ============ BASE INTERFACES AND PROTOCOLS ============
 
