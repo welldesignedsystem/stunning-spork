@@ -275,6 +275,32 @@ class FunctionTool {
     +to_tool_schema(): ToolSchema
 }
 
+class MCPTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_mcp_client: MCPClient
+    #_tool_name: str
+    +__init__(mcp_client: MCPClient, tool_name: str)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): Any
+    +to_tool_schema(): ToolSchema
+}
+
+class WorkbenchTool {
+    +name: str
+    +description: str
+    +args_type: type
+    +return_type: type
+    #_workbench: BaseWorkbench
+    #_operation: str
+    +__init__(workbench: BaseWorkbench, operation: str)
+    +run_json(args: str, cancellation_token): str
+    +run(args, cancellation_token): Any
+    +to_tool_schema(): ToolSchema
+}
+
 class ToolSchema {
     +name: str
     +description: str
@@ -296,8 +322,85 @@ class FunctionExecutionResult {
 }
 
 BaseTool <|-- FunctionTool
+BaseTool <|-- MCPTool
+BaseTool <|-- WorkbenchTool
 BaseTool ..> ToolSchema : creates
 BaseTool ..> FunctionExecutionResult : produces
+
+' ============ MCP (Model Context Protocol) COMPONENTS ============
+
+interface MCPClient <<Protocol>> {
+    +{abstract} list_tools(): List<MCPToolDefinition>
+    +{abstract} call_tool(tool_name: str, arguments: Dict): MCPToolResult
+    +{abstract} list_resources(): List<MCPResource>
+    +{abstract} read_resource(uri: str): MCPResourceContent
+    +{abstract} connect(): None
+    +{abstract} disconnect(): None
+}
+
+class MCPToolDefinition {
+    +name: str
+    +description: str
+    +input_schema: Dict
+    +__init__(name, description, input_schema)
+}
+
+class MCPToolResult {
+    +content: str | List
+    +is_error: bool
+    +__init__(content, is_error)
+}
+
+class MCPResource {
+    +uri: str
+    +name: str
+    +description: str
+    +mime_type: str
+    +__init__(uri, name, description, mime_type)
+}
+
+class MCPResourceContent {
+    +uri: str
+    +content: str | bytes
+    +mime_type: str
+    +__init__(uri, content, mime_type)
+}
+
+class StdioMCPClient {
+    #_command: str
+    #_args: List<str>
+    #_process: asyncio.subprocess.Process
+    #_connected: bool
+    +__init__(command: str, args: List<str>)
+    +list_tools(): List<MCPToolDefinition>
+    +call_tool(tool_name: str, arguments: Dict): MCPToolResult
+    +list_resources(): List<MCPResource>
+    +read_resource(uri: str): MCPResourceContent
+    +connect(): None
+    +disconnect(): None
+}
+
+class HttpMCPClient {
+    #_base_url: str
+    #_headers: Dict
+    #_session: aiohttp.ClientSession
+    +__init__(base_url: str, headers: Dict)
+    +list_tools(): List<MCPToolDefinition>
+    +call_tool(tool_name: str, arguments: Dict): MCPToolResult
+    +list_resources(): List<MCPResource>
+    +read_resource(uri: str): MCPResourceContent
+    +connect(): None
+    +disconnect(): None
+}
+
+MCPClient <|.. StdioMCPClient
+MCPClient <|.. HttpMCPClient
+MCPClient ..> MCPToolDefinition : provides
+MCPClient ..> MCPToolResult : produces
+MCPClient ..> MCPResource : provides
+MCPClient ..> MCPResourceContent : produces
+
+MCPTool o-- MCPClient : uses
 
 ' ============ CODE EXECUTOR HIERARCHY ============
 
@@ -389,6 +492,279 @@ class Workbench {
     +list_files(pattern: str): List<str>
     +get_absolute_path(path: str): str
 }
+' ============ WORKBENCH HIERARCHY ============
+
+abstract class BaseWorkbench {
+    +{abstract} root_dir: str
+    +{abstract} working_dir: str
+    +{abstract} create_file(path: str, content: str): str
+    +{abstract} read_file(path: str): str
+    +{abstract} write_file(path: str, content: str): str
+    +{abstract} delete_file(path: str): None
+    +{abstract} list_files(pattern: str): List<str>
+    +{abstract} get_absolute_path(path: str): str
+    +{abstract} exists(path: str): bool
+    +{abstract} mkdir(path: str, parents: bool): str
+    +{abstract} move_file(src: str, dst: str): str
+    +{abstract} copy_file(src: str, dst: str): str
+    +{abstract} get_file_info(path: str): FileInfo
+    +{abstract} save_state(): WorkbenchState
+    +{abstract} load_state(state: WorkbenchState): None
+}
+
+class Workbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_security_manager: SecurityManager
+    +__init__(root_dir: str, security_manager: SecurityManager)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class MCPWorkbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_mcp_client: MCPClient
+    #_resource_prefix: str
+    +__init__(mcp_client: MCPClient, resource_prefix: str)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class GitWorkbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_base_workbench: BaseWorkbench
+    #_repo: git.Repo
+    #_auto_commit: bool
+    +__init__(base_workbench: BaseWorkbench, auto_commit: bool)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +commit(message: str): str
+    +create_branch(branch_name: str): None
+    +checkout(branch_name: str): None
+    +diff(commit1: str, commit2: str): str
+    +rollback(commit_hash: str): None
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class SandboxWorkbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_base_workbench: BaseWorkbench
+    #_allowed_paths: List<str>
+    #_blocked_paths: List<str>
+    #_read_only_paths: List<str>
+    #_max_file_size: int
+    +__init__(base_workbench: BaseWorkbench, allowed_paths, blocked_paths, read_only_paths, max_file_size)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +_validate_path(path: str): bool
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class EnvironmentWorkbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_base_workbench: BaseWorkbench
+    #_env_vars: Dict<str, str>
+    #_config_files: Dict<str, str>
+    #_secrets_manager: SecretsManager
+    +__init__(base_workbench: BaseWorkbench, secrets_manager: SecretsManager)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +set_env_var(key: str, value: str): None
+    +get_env_var(key: str): str
+    +load_config(path: str): Dict
+    +save_config(path: str, config: Dict): None
+    +get_secret(key: str): str
+    +set_secret(key: str, value: str): None
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class BuildWorkbench {
+    +{static} component_type: ClassVar<ComponentType>
+    +root_dir: str
+    +working_dir: str
+    #_base_workbench: BaseWorkbench
+    #_build_system: str
+    #_build_config: Dict
+    +__init__(base_workbench: BaseWorkbench, build_system: str)
+    +create_file(path: str, content: str): str
+    +read_file(path: str): str
+    +write_file(path: str, content: str): str
+    +delete_file(path: str): None
+    +list_files(pattern: str): List<str>
+    +get_absolute_path(path: str): str
+    +exists(path: str): bool
+    +mkdir(path: str, parents: bool): str
+    +move_file(src: str, dst: str): str
+    +copy_file(src: str, dst: str): str
+    +get_file_info(path: str): FileInfo
+    +build(target: str): BuildResult
+    +test(test_pattern: str): TestResult
+    +install_dependencies(): None
+    +run_linter(): LintResult
+    +format_code(): None
+    +save_state(): WorkbenchState
+    +load_state(state: WorkbenchState): None
+}
+
+class FileInfo {
+    +path: str
+    +size: int
+    +created_at: datetime
+    +modified_at: datetime
+    +is_directory: bool
+    +permissions: str
+    +__init__(path, size, created_at, modified_at, is_directory, permissions)
+}
+
+class WorkbenchState {
+    +working_dir: str
+    +file_tree: Dict
+    +metadata: Dict
+    +timestamp: datetime
+    +__init__(working_dir, file_tree, metadata, timestamp)
+}
+
+class SecurityManager {
+    #_allowed_operations: Set<str>
+    #_path_validator: PathValidator
+    +__init__(allowed_operations: Set, path_validator: PathValidator)
+    +validate_operation(operation: str, path: str): bool
+    +sanitize_path(path: str): str
+}
+
+class SecretsManager {
+    #_secrets_store: Dict<str, str>
+    #_encryption_key: bytes
+    +__init__(encryption_key: bytes)
+    +get_secret(key: str): str
+    +set_secret(key: str, value: str): None
+    +delete_secret(key: str): None
+    +list_secrets(): List<str>
+}
+
+class BuildResult {
+    +success: bool
+    +output: str
+    +errors: List<str>
+    +duration: float
+    +__init__(success, output, errors, duration)
+}
+
+class TestResult {
+    +success: bool
+    +passed: int
+    +failed: int
+    +skipped: int
+    +output: str
+    +__init__(success, passed, failed, skipped, output)
+}
+
+class LintResult {
+    +issues: List<LintIssue>
+    +total_issues: int
+    +__init__(issues, total_issues)
+}
+
+class LintIssue {
+    +file: str
+    +line: int
+    +column: int
+    +severity: str
+    +message: str
+    +__init__(file, line, column, severity, message)
+}
+
+BaseWorkbench <|-- Workbench
+BaseWorkbench <|-- MCPWorkbench
+BaseWorkbench <|-- GitWorkbench
+BaseWorkbench <|-- SandboxWorkbench
+BaseWorkbench <|-- EnvironmentWorkbench
+BaseWorkbench <|-- BuildWorkbench
+
+ComponentBase <|.. BaseWorkbench
+Component <|.. Workbench
+Component <|.. MCPWorkbench
+Component <|.. GitWorkbench
+Component <|.. SandboxWorkbench
+Component <|.. EnvironmentWorkbench
+Component <|.. BuildWorkbench
+
+Workbench o-- SecurityManager : uses
+MCPWorkbench o-- MCPClient : uses
+GitWorkbench o-- BaseWorkbench : wraps
+SandboxWorkbench o-- BaseWorkbench : wraps
+EnvironmentWorkbench o-- BaseWorkbench : wraps
+EnvironmentWorkbench o-- SecretsManager : uses
+BuildWorkbench o-- BaseWorkbench : wraps
+
+BaseWorkbench ..> FileInfo : produces
+BaseWorkbench ..> WorkbenchState : produces
+BuildWorkbench ..> BuildResult : produces
+BuildWorkbench ..> TestResult : produces
+BuildWorkbench ..> LintResult : produces
+
+WorkbenchTool o-- BaseWorkbench : uses
 
 ' ============ BASE AGENT CLASS ============
 
@@ -935,5 +1311,6 @@ ChatCompletionClient ..> RequestUsage : produces
 
 ToolCallMessage o-- FunctionCall : contains
 ToolCallResultMessage o-- FunctionExecutionResult : contains
+
 
 @enduml
