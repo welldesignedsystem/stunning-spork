@@ -408,15 +408,6 @@ class FunctionExecutionResult {
 
 ' ============ MCP (Model Context Protocol) COMPONENTS ============
 
-interface MCPClient <<Protocol>> {
-    +{abstract} list_tools(): List<MCPToolDefinition>
-    +{abstract} call_tool(tool_name: str, arguments: Dict): MCPToolResult
-    +{abstract} list_resources(): List<MCPResource>
-    +{abstract} read_resource(uri: str): MCPResourceContent
-    +{abstract} connect(): None
-    +{abstract} disconnect(): None
-}
-
 class MCPToolDefinition {
     +name: str
     +description: str
@@ -444,34 +435,44 @@ class MCPResourceContent {
     +mime_type: str
     +__init__(uri, content, mime_type)
 }
+rectangle "model context protocol" #FFB1C1 {
 
-class StdioMCPClient {
-    #_command: str
-    #_args: List<str>
-    #_process: asyncio.subprocess.Process
-    #_connected: bool
-    +__init__(command: str, args: List<str>)
-    +list_tools(): List<MCPToolDefinition>
-    +call_tool(tool_name: str, arguments: Dict): MCPToolResult
-    +list_resources(): List<MCPResource>
-    +read_resource(uri: str): MCPResourceContent
-    +connect(): None
-    +disconnect(): None
+    interface MCPClient <<Protocol>> {
+        +{abstract} list_tools(): List<MCPToolDefinition>
+        +{abstract} call_tool(tool_name: str, arguments: Dict): MCPToolResult
+        +{abstract} list_resources(): List<MCPResource>
+        +{abstract} read_resource(uri: str): MCPResourceContent
+        +{abstract} connect(): None
+        +{abstract} disconnect(): None
+    }
+
+    class StdioMCPClient {
+        #_command: str
+        #_args: List<str>
+        #_process: asyncio.subprocess.Process
+        #_connected: bool
+        +__init__(command: str, args: List<str>)
+        +list_tools(): List<MCPToolDefinition>
+        +call_tool(tool_name: str, arguments: Dict): MCPToolResult
+        +list_resources(): List<MCPResource>
+        +read_resource(uri: str): MCPResourceContent
+        +connect(): None
+        +disconnect(): None
+    }
+
+    class HttpMCPClient {
+        #_base_url: str
+        #_headers: Dict
+        #_session: aiohttp.ClientSession
+        +__init__(base_url: str, headers: Dict)
+        +list_tools(): List<MCPToolDefinition>
+        +call_tool(tool_name: str, arguments: Dict): MCPToolResult
+        +list_resources(): List<MCPResource>
+        +read_resource(uri: str): MCPResourceContent
+        +connect(): None
+        +disconnect(): None
+    }
 }
-
-class HttpMCPClient {
-    #_base_url: str
-    #_headers: Dict
-    #_session: aiohttp.ClientSession
-    +__init__(base_url: str, headers: Dict)
-    +list_tools(): List<MCPToolDefinition>
-    +call_tool(tool_name: str, arguments: Dict): MCPToolResult
-    +list_resources(): List<MCPResource>
-    +read_resource(uri: str): MCPResourceContent
-    +connect(): None
-    +disconnect(): None
-}
-
 MCPClient <|.. StdioMCPClient
 MCPClient <|.. HttpMCPClient
 MCPClient ..> MCPToolDefinition : provides
