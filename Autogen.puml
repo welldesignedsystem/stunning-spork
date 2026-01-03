@@ -755,4 +755,30 @@ note right of McpWorkbench
   - HTTP: Web-based servers
 end note
 
+note right of McpWorkbench
+  **McpWorkbench** integrates with
+  Model Context Protocol (MCP) servers
+
+  Supports multiple server types:
+  - Stdio: Local process communication
+  - SSE: Server-Sent Events
+  - HTTP: Web-based servers
+end note
+
+' ============ UI COMPONENTS ============
+class Console {
+    +{static} run_stream_for_agent(agent, task, cancellation_token): TaskResult
+    +{static} run_stream_for_team(team, task, cancellation_token): TaskResult
+    +{static} print(message): None
+    +{static} print_message(message, depth): None
+    +{static} print_event(event, depth): None
+}
+
+Console ..> BaseChatAgent : displays
+Console ..> Team : displays
+Console ..> BaseChatMessage : renders
+Console ..> BaseAgentEvent : renders
+
+@enduml
+
 @enduml
