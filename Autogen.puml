@@ -328,14 +328,7 @@ rectangle "base tool" #D8BFD8 {
         #_summarize_conversation(messages: List): str
     }
 
-
-    class TeamTaskResult {
-        +messages: Sequence<BaseChatMessage>
-        +stop_reason: str | None
-        +participant_results: Dict<str, TaskResult>
-        +conversation_history: List<BaseChatMessage>
-        +__init__(messages, stop_reason, participant_results, conversation_history)
-    }
+    class WebSearchTool {}
 
     class MCPTool {
         +name: str
@@ -373,10 +366,12 @@ rectangle "base tool" #D8BFD8 {
     class FileDeleteTool {}
 }
 
-interface ChatAgent <<Protocol>> {
-    +name: str
-    +description: str
-    +run(task: str, cancellation_token): TaskResult
+class TeamTaskResult {
+    +messages: Sequence<BaseChatMessage>
+    +stop_reason: str | None
+    +participant_results: Dict<str, TaskResult>
+    +conversation_history: List<BaseChatMessage>
+    +__init__(messages, stop_reason, participant_results, conversation_history)
 }
 
 class TaskResult {
@@ -980,6 +975,11 @@ BaseAgentEvent <|-- CodeExecutionEvent
 ' ============ BASE AGENT CLASS ============
 
 rectangle "base chat agent" #FFA07A {
+    interface ChatAgent <<Protocol>> {
+        +name: str
+        +description: str
+        +run(task: str, cancellation_token): TaskResult
+    }
     abstract class BaseChatAgent {
         +{static} component_type: ClassVar<ComponentType>
         #_name: str
