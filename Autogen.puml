@@ -256,7 +256,8 @@ rectangle "base tool" #D8BFD8 {
         +{abstract} run(args, cancellation_token): Any
         +{abstract} to_tool_schema(): ToolSchema
     }
-
+    class ConditionalTool {}
+    class SequentialTool {}
     class FunctionTool {
         +name: str
         +description: str
