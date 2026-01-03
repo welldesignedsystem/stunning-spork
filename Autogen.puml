@@ -256,8 +256,9 @@ rectangle "base tool" #D8BFD8 {
         +{abstract} run(args, cancellation_token): Any
         +{abstract} to_tool_schema(): ToolSchema
     }
-    class ConditionalTool {}
-    class SequentialTool {}
+    class BaseToolWithState {
+    }
+    class BaseStreamTool {}
     class FunctionTool {
         +name: str
         +description: str
@@ -281,90 +282,14 @@ rectangle "base tool" #D8BFD8 {
         +to_tool_schema(): ToolSchema
     }
 
-    class AsyncFunctionTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_async_func: Callable
-        #_func_signature: inspect.Signature
-        +__init__(async_func: Callable, name: str, description: str)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): Any
-        +to_tool_schema(): ToolSchema
-    }
-    ' ============ AGENT TOOL ============
-
-    class AgentTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_agent: ChatAgent
-        #_can_pass_context: bool
-        #_max_turns: int | None
-        +__init__(agent: ChatAgent, can_pass_context: bool, max_turns: int)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): TaskResult
-        +to_tool_schema(): ToolSchema
-        #_format_result(task_result: TaskResult): str
-    }
-
-    ' ============ TEAM TOOL ============
-
-    class TeamTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_team: Team
-        #_can_pass_context: bool
-        #_max_turns: int | None
-        #_return_full_history: bool
-        +__init__(team: Team, can_pass_context: bool, max_turns: int, return_full_history: bool)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): TeamTaskResult
-        +to_tool_schema(): ToolSchema
-        #_format_result(task_result: TeamTaskResult): str
-        #_summarize_conversation(messages: List): str
-    }
-
-    class WebSearchTool {}
-
-    class MCPTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_mcp_client: MCPClient
-        #_tool_name: str
-        +__init__(mcp_client: MCPClient, tool_name: str)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): Any
-        +to_tool_schema(): ToolSchema
-    }
-
-    class WorkbenchTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_workbench: BaseWorkbench
-        #_operation: str
-        +__init__(workbench: BaseWorkbench, operation: str)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): Any
-        +to_tool_schema(): ToolSchema
-    }
-
-    class DatabaseQueryTool {}
-    class APICallTool {}
-    class WebScrapeTool {}
-    class WebSearchTool {}
-    class FileReadTool {}
-    class FileWriteTool {}
-    class FileListTool {}
-    class FileDeleteTool {}
+    BaseTool <|-- PythonCodeExecutionTool
+    BaseTool <|-- FunctionTool
+    BaseTool <|-- BaseStreamTool
+    BaseTool <|-- BaseToolWithState
+    BaseTool <|-- AgentTool
+    BaseTool <|-- MCPTool
+    BaseTool ..> ToolSchema : creates
+    BaseTool ..> FunctionExecutionResult : produces
 }
 
     class TeamTaskResult {
@@ -1387,20 +1312,6 @@ class Image {
 
 ' ============ RELATIONSHIPS ============
 
-BaseTool <|-- PythonCodeExecutionTool
-BaseTool <|-- WebScrapeTool
-BaseTool <|-- APICallTool
-BaseTool <|-- DatabaseQueryTool
-BaseTool <|-- ConditionalTool
-BaseTool <|-- SequentialTool
-BaseTool <|-- FunctionTool
-BaseTool <|-- AsyncFunctionTool
-BaseTool <|-- AgentTool
-BaseTool <|-- TeamTool
-BaseTool <|-- MCPTool
-BaseTool <|-- WorkbenchTool
-BaseTool ..> ToolSchema : creates
-BaseTool ..> FunctionExecutionResult : produces
 
 WorkbenchTool <|-- FileReadTool
 WorkbenchTool <|-- FileWriteTool
