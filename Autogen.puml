@@ -260,26 +260,8 @@ rectangle "base tool" #D8BFD8 {
     }
     class BaseStreamTool {}
     class FunctionTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_func: Callable
-        +__init__(func: Callable, name: str, description: str)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): Any
-        +to_tool_schema(): ToolSchema
     }
     class PythonCodeExecutionTool {
-        +name: str
-        +description: str
-        +args_type: type
-        +return_type: type
-        #_func: Callable
-        +__init__(func: Callable, name: str, description: str)
-        +run_json(args: str, cancellation_token): str
-        +run(args, cancellation_token): Any
-        +to_tool_schema(): ToolSchema
     }
 
     BaseTool <|-- PythonCodeExecutionTool
@@ -290,13 +272,13 @@ rectangle "base tool" #D8BFD8 {
     BaseTool <|-- MCPTool
 }
 
-    class TeamTaskResult {
-        +messages: Sequence<BaseChatMessage>
-        +stop_reason: str | None
-        +participant_results: Dict<str, TaskResult>
-        +conversation_history: List<BaseChatMessage>
-        +__init__(messages, stop_reason, participant_results, conversation_history)
-    }
+class TeamTaskResult {
+    +messages: Sequence<BaseChatMessage>
+    +stop_reason: str | None
+    +participant_results: Dict<str, TaskResult>
+    +conversation_history: List<BaseChatMessage>
+    +__init__(messages, stop_reason, participant_results, conversation_history)
+}
 
 interface ChatAgent <<Protocol>> {
     +name: str
