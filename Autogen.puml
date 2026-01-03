@@ -1,147 +1,283 @@
-@startuml Agent_Framework
+@startuml AutoGen_Framework_Corrected
 
-' ============ BASE INTERFACES AND PROTOCOLS ============
+!define CORE_COLOR #E8F4F8
+!define AGENTCHAT_COLOR #F0E68C
+!define EXTENSIONS_COLOR #FFE4E1
+!define PROTOCOL_COLOR #E6E6FA
 
-interface TaskRunner <<Protocol>> {
-    +run(task, cancellation_token, output_task_messages): TaskResult
-    +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+' ============================================================================
+' LEGEND
+' ============================================================================
+legend right
+  |<back:#E8F4F8>      </back>| autogen_core |
+  |<back:#F0E68C>      </back>| autogen_agentchat |
+  |<back:#FFE4E1>      </back>| autogen_ext |
+  |<back:#E6E6FA>      </back>| Protocol/Interface |
+endlegend
+
+' ============================================================================
+' CORE PROTOCOLS AND BASE CLASSES
+' ============================================================================
+
+package "autogen_core" <<Rectangle>> {
+
+    interface Agent <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} id: AgentId
+        +{abstract} metadata: AgentMetadata
+    }
+
+    abstract class BaseAgent CORE_COLOR {
+        #_id: AgentId
+        #_metadata: AgentMetadata
+        +__init__(description: str)
+        +{abstract} on_message()
+        +save_state(): Mapping
+        +load_state(state: Mapping)
+    }
+
+    class AgentId CORE_COLOR {
+        +type: str
+        +key: str
+        +__init__(type: str, key: str)
+    }
+
+    class AgentMetadata CORE_COLOR {
+        +description: str
+        +__init__(description: str)
+    }
+
+    class AgentProxy CORE_COLOR {
+        +id: AgentId
+        +runtime: AgentRuntime
+    }
+
+    abstract class AgentRuntime CORE_COLOR {
+        +{abstract} register(type: str, agent_factory)
+        +{abstract} send_message(message, recipient: AgentId)
+        +{abstract} publish_message(message, topic_id: TopicId)
+        +{abstract} start()
+        +{abstract} stop()
+    }
+
+    class SingleThreadedAgentRuntime CORE_COLOR {
+        +register(type: str, agent_factory)
+        +send_message(message, recipient: AgentId)
+        +publish_message(message, topic_id: TopicId)
+        +start()
+        +stop()
+    }
+
+    class RoutedAgent CORE_COLOR {
+        +on_message(message, ctx: MessageContext)
+    }
+
+    class ClosureAgent CORE_COLOR {
+        #_closure: Callable
+        +on_message(message, ctx: MessageContext)
+    }
+
+    class MessageContext CORE_COLOR {
+        +sender: AgentId
+        +topic_id: TopicId
+        +cancellation_token: CancellationToken
+    }
+
+    class MessageHandlerContext CORE_COLOR {
+        +agent_id: AgentId
+        +cancellation_token: CancellationToken
+    }
+
+    class TopicId CORE_COLOR {
+        +type: str
+        +source: str
+        +__init__(type: str, source: str)
+    }
+
+    class DefaultTopicId CORE_COLOR {
+    }
+
+    abstract class Subscription CORE_COLOR {
+        +{abstract} is_match(topic_id: TopicId): bool
+    }
+
+    class TypeSubscription CORE_COLOR {
+        +topic_type: str
+        +is_match(topic_id: TopicId): bool
+    }
+
+    class DefaultSubscription CORE_COLOR {
+        +is_match(topic_id: TopicId): bool
+    }
+
+    class TypePrefixSubscription CORE_COLOR {
+        +topic_type_prefix: str
+        +is_match(topic_id: TopicId): bool
+    }
+
+    class CancellationToken CORE_COLOR {
+        +is_cancelled: bool
+        +cancel()
+    }
+
+    class FunctionCall CORE_COLOR {
+        +id: str
+        +name: str
+        +arguments: str
+    }
+
+    class Image CORE_COLOR {
+        +data: bytes
+        +mime_type: str
+    }
+
+    class UnknownPayload CORE_COLOR {
+        +data: bytes
+        +content_type: str
+    }
 }
 
-interface ComponentBase {
-    +component_type: ComponentType
+Agent <|.. BaseAgent
+BaseAgent <|-- RoutedAgent
+BaseAgent <|-- ClosureAgent
+AgentRuntime <|-- SingleThreadedAgentRuntime
+Subscription <|-- TypeSubscription
+Subscription <|-- DefaultSubscription
+Subscription <|-- TypePrefixSubscription
+TopicId <|-- DefaultTopicId
+
+' ============================================================================
+' COMPONENT SYSTEM
+' ============================================================================
+
+package "autogen_core (Component System)" <<Rectangle>> {
+
+    interface ComponentBase CORE_COLOR {
+        +component_type: ComponentType
+    }
+
+    interface Component<T> CORE_COLOR {
+        +component_version: int
+        +component_config_schema: type
+        +component_provider_override: str
+        +_to_config(): T
+        +_from_config(config: T): Self
+    }
+
+    class ComponentModel CORE_COLOR {
+        +provider: str
+        +component_type: str
+        +version: int
+        +config: Dict
+    }
+
+    class ComponentLoader CORE_COLOR {
+        +{static} load_component(config: ComponentModel)
+        +{static} save_component(component)
+    }
+
+    enum ComponentSchemaType CORE_COLOR {
+        PYDANTIC
+        JSON_SCHEMA
+    }
 }
 
-interface Component<T> {
-    +component_version: int
-    +component_config_schema: type
-    +component_provider_override: str
-    +_to_config(): T
-    +_from_config(config: T): Self
-}
+' ============================================================================
+' MODEL CLIENT HIERARCHY
+' ============================================================================
 
-abstract class ABC
+package "autogen_core.models" <<Rectangle>> {
 
-' ============ MODEL CLIENT HIERARCHY ============
-rectangle "Chat Completion Client" #FFE4B5 {
-    interface ChatCompletionClient <<Protocol>> {
+    interface ChatCompletionClient <<Protocol>> PROTOCOL_COLOR {
         +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-        +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator<str | CreateResult>
+        +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
         +{abstract} actual_usage(): RequestUsage
         +{abstract} total_usage(): RequestUsage
         +{abstract} count_tokens(messages, tools, json_output): int
         +{abstract} remaining_tokens(messages, tools, json_output): int
     }
 
-    abstract class BaseOpenAIChatCompletionClient {
-        +{static} component_type: ClassVar<ComponentType>
+    class ModelCapabilities CORE_COLOR {
+        +vision: bool
+        +function_calling: bool
+        +json_output: bool
+    }
+
+    class ModelInfo CORE_COLOR {
+        +family: ModelFamily
+        +context_window: int
+        +capabilities: ModelCapabilities
+    }
+
+    enum ModelFamily CORE_COLOR {
+        GPT_4
+        GPT_3_5
+        CLAUDE
+        GEMINI
+        UNKNOWN
+    }
+
+    class SystemMessage CORE_COLOR {
+        +content: str
+    }
+
+    class UserMessage CORE_COLOR {
+        +content: str | List
+    }
+
+    class AssistantMessage CORE_COLOR {
+        +content: str | List
+        +function_calls: List[FunctionCall]
+    }
+
+    class FunctionExecutionResult CORE_COLOR {
+        +content: str
+        +call_id: str
+    }
+
+    class FunctionExecutionResultMessage CORE_COLOR {
+        +content: List[FunctionExecutionResult]
+    }
+
+    class CreateResult CORE_COLOR {
+        +content: str
+        +finish_reason: str
+        +usage: RequestUsage
+        +cached: bool
+        +logprobs: List | None
+    }
+
+    class RequestUsage CORE_COLOR {
+        +prompt_tokens: int
+        +completion_tokens: int
+        +total_tokens: int
+    }
+
+    class TopLogprob CORE_COLOR {
+        +token: str
+        +logprob: float
+    }
+
+    class ChatCompletionTokenLogprob CORE_COLOR {
+        +token: str
+        +logprob: float
+        +top_logprobs: List[TopLogprob]
+    }
+}
+
+ChatCompletionClient ..> CreateResult : produces
+ChatCompletionClient ..> RequestUsage : uses
+CreateResult *-- RequestUsage
+
+' ============================================================================
+' MODEL CLIENT EXTENSIONS
+' ============================================================================
+
+package "autogen_ext.models" <<Rectangle>> {
+
+    abstract class BaseOpenAIChatCompletionClient EXTENSIONS_COLOR {
         #_model: str
-        #_api_key: str | None
-        #_base_url: str | None
-        #_timeout: float | None
-        #_max_retries: int
-        #_model_info: ModelInfo
         #_client: AsyncOpenAI
-        +__init__(model, api_key, base_url, timeout, max_retries, model_info, ...)
-        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-        +actual_usage(): RequestUsage
-        +total_usage(): RequestUsage
-        +count_tokens(messages, tools, json_output): int
-        +remaining_tokens(messages, tools, json_output): int
-        +close(): None
-    }
-
-    class OpenAIChatCompletionClient {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
-        +__init__(model, api_key, organization, base_url, timeout, max_retries, model_info, ...)
-        +_to_config(): OpenAIClientConfigurationConfigModel
-        +_from_config(config): Self
-    }
-
-    class AzureOpenAIChatCompletionClient {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
-        #_azure_deployment: str
-        #_azure_endpoint: str
-        #_api_version: str
-        #_azure_ad_token_provider: Callable | None
-        +__init__(azure_deployment, model, azure_endpoint, api_version, api_key, azure_ad_token_provider, ...)
-        +_to_config(): AzureOpenAIClientConfigurationConfigModel
-        +_from_config(config): Self
-    }
-
-    abstract class BaseAnthropicChatCompletionClient {
-        +{static} component_type: ClassVar<ComponentType>
-        #_model: str
-        #_api_key: str | None
-        #_base_url: str | None
-        #_timeout: float
-        #_max_tokens: int
-        #_temperature: float
-        #_client: AsyncAnthropic
-        +__init__(model, api_key, base_url, timeout, max_tokens, temperature, ...)
-        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-        +actual_usage(): RequestUsage
-        +total_usage(): RequestUsage
-        +count_tokens(messages, tools, json_output): int
-        +remaining_tokens(messages, tools, json_output): int
-        +close(): None
-    }
-
-    class AnthropicChatCompletionClient {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
-        +__init__(model, api_key, max_tokens, temperature, ...)
-        +_to_config(): AnthropicClientConfigurationConfigModel
-        +_from_config(config): Self
-    }
-
-    class AnthropicBedrockChatCompletionClient {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
-        #_aws_region: str
-        #_aws_access_key_id: str | None
-        #_aws_secret_access_key: str | None
-        +__init__(model, aws_region, aws_access_key_id, aws_secret_access_key, ...)
-        +_to_config(): AnthropicBedrockClientConfigurationConfigModel
-        +_from_config(config): Self
-    }
-
-    abstract class BaseOllamaChatCompletionClient {
-        +{static} component_type: ClassVar<ComponentType>
-        #_model: str
-        #_host: str
-        #_timeout: float | None
-        #_response_format: type | None
-        #_client: AsyncClient
-        +__init__(model, host, timeout, response_format, ...)
-        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-        +actual_usage(): RequestUsage
-        +total_usage(): RequestUsage
-        +count_tokens(messages, tools, json_output): int
-        +remaining_tokens(messages, tools, json_output): int
-        +close(): None
-    }
-
-    class OllamaChatCompletionClient {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
-        +__init__(model, host, timeout, response_format, ...)
-        +_to_config(): BaseOllamaClientConfigurationConfigModel
-        +_from_config(config): Self
-    }
-
-    class SKChatCompletionAdapter {
-        +{static} component_type: ClassVar<ComponentType>
-        #_sk_client: ChatCompletionClientBase
-        #_kernel: Kernel | None
-        #_prompt_settings: PromptExecutionSettings | None
         #_model_info: ModelInfo
-        #_service_id: str | None
-        +__init__(sk_client, kernel, prompt_settings, model_info, service_id)
         +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
         +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
         +actual_usage(): RequestUsage
@@ -150,35 +286,60 @@ rectangle "Chat Completion Client" #FFE4B5 {
         +remaining_tokens(messages, tools, json_output): int
     }
 
-    class ChatCompletionCache {
-        +{static} component_type: ClassVar<ComponentType>
+    class OpenAIChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, api_key, base_url, timeout, max_retries, model_info)
+    }
+
+    class AzureOpenAIChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, api_key, azure_endpoint, api_version, azure_deployment, timeout, max_retries, model_info)
+    }
+
+    abstract class BaseAnthropicChatCompletionClient EXTENSIONS_COLOR {
+        #_model: str
+        #_client: AsyncAnthropic
+        #_model_info: ModelInfo
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+    }
+
+    class AnthropicChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, api_key, timeout, max_retries, model_info)
+    }
+
+    class AnthropicBedrockChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, region, access_key_id, secret_access_key, timeout, max_retries, model_info)
+    }
+
+    class OllamaChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, base_url, timeout, max_retries, model_info)
+    }
+
+    class AzureAIChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model, endpoint, credential, timeout, max_retries, model_info)
+    }
+
+    class LlamaCppChatCompletionClient EXTENSIONS_COLOR {
+        +__init__(model_path, n_ctx, n_gpu_layers, model_info)
+    }
+
+    class ReplayChatCompletionClient EXTENSIONS_COLOR {
+        #_recorded_responses: List
+        +__init__(recorded_responses)
+    }
+
+    class ChatCompletionCache EXTENSIONS_COLOR {
         #_client: ChatCompletionClient
         #_cache_store: CacheStore
         +__init__(client, cache_store)
         +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-        +actual_usage(): RequestUsage
-        +total_usage(): RequestUsage
-        +count_tokens(messages, tools, json_output): int
-        +remaining_tokens(messages, tools, json_output): int
-        +close(): None
     }
-}
 
-class RequestUsage {
-    +prompt_tokens: int
-    +completion_tokens: int
-    +total_tokens: int
-    +__init__(prompt_tokens, completion_tokens)
-}
-
-class CreateResult {
-    +content: str
-    +finish_reason: str
-    +usage: RequestUsage
-    +cached: bool
-    +logprobs: List | None
-    +__init__(content, finish_reason, usage, cached, logprobs)
+    class SKChatCompletionAdapter EXTENSIONS_COLOR {
+        #_sk_client: ChatCompletionClientBase
+        #_kernel: Kernel | None
+        +__init__(sk_client, kernel, prompt_settings, model_info, service_id)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+    }
 }
 
 ChatCompletionClient <|.. BaseOpenAIChatCompletionClient
@@ -191,687 +352,716 @@ ChatCompletionClient <|.. BaseAnthropicChatCompletionClient
 BaseAnthropicChatCompletionClient <|-- AnthropicChatCompletionClient
 BaseAnthropicChatCompletionClient <|-- AnthropicBedrockChatCompletionClient
 Component <|.. AnthropicChatCompletionClient
-Component <|.. AnthropicBedrockChatCompletionClient
 
-ChatCompletionClient <|.. BaseOllamaChatCompletionClient
-BaseOllamaChatCompletionClient <|-- OllamaChatCompletionClient
-Component <|.. OllamaChatCompletionClient
-
+ChatCompletionClient <|.. OllamaChatCompletionClient
+ChatCompletionClient <|.. AzureAIChatCompletionClient
+ChatCompletionClient <|.. LlamaCppChatCompletionClient
+ChatCompletionClient <|.. ReplayChatCompletionClient
+ChatCompletionClient <|.. ChatCompletionCache
 ChatCompletionClient <|.. SKChatCompletionAdapter
 
-ChatCompletionClient <|.. ChatCompletionCache
 ChatCompletionCache o-- ChatCompletionClient : wraps
 
-ChatCompletionClient ..> CreateResult : produces
-ChatCompletionClient ..> RequestUsage : produces
+' ============================================================================
+' CACHE STORE
+' ============================================================================
 
-' ============ LLM MESSAGE TYPES ============
-rectangle "Base Model" #LightBlue {
+package "autogen_core (Cache)" <<Rectangle>> {
 
-    abstract class BaseModel {
-        +{abstract} content: str | List
-        +role: str
+    interface CacheStore <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} get(key: str): bytes | None
+        +{abstract} set(key: str, value: bytes)
+        +{abstract} close()
     }
 
-    class SystemMessage {
-        +content: str
-        +role: str = "system"
-        +__init__(content: str)
-    }
-
-    class UserMessage {
-        +content: str | List
-        +role: str = "user"
-        +__init__(content: str | List)
-    }
-
-    class AssistantMessage {
-        +content: str | None
-        +function_call: FunctionCall | None
-        +tool_calls: List<FunctionCall> | None
-        +role: str = "assistant"
-        +__init__(content, function_call, tool_calls)
-    }
-
-    class FunctionExecutionResultMessage {
-        +content: str
-        +role: str = "function"
-        +call_id: str
-        +__init__(content: str, call_id: str)
+    class InMemoryStore CORE_COLOR {
+        #_cache: Dict[str, bytes]
+        +get(key: str): bytes | None
+        +set(key: str, value: bytes)
+        +close()
     }
 }
-BaseModel <|-- SystemMessage
-BaseModel <|-- UserMessage
-BaseModel <|-- AssistantMessage
-BaseModel <|-- FunctionExecutionResultMessage
 
-' ============ TOOL HIERARCHY ============
-rectangle "base tool" #D8BFD8 {
-    abstract class BaseTool {
+package "autogen_ext.cache_store" <<Rectangle>> {
+
+    class DiskCacheStore EXTENSIONS_COLOR {
+        #_cache_dir: str
+        +get(key: str): bytes | None
+        +set(key: str, value: bytes)
+        +close()
+    }
+
+    class RedisStore EXTENSIONS_COLOR {
+        #_redis_client: Redis
+        +get(key: str): bytes | None
+        +set(key: str, value: bytes)
+        +close()
+    }
+}
+
+CacheStore <|.. InMemoryStore
+CacheStore <|.. DiskCacheStore
+CacheStore <|.. RedisStore
+
+' ============================================================================
+' TOOLS HIERARCHY
+' ============================================================================
+
+package "autogen_core.tools" <<Rectangle>> {
+
+    interface Tool <<Protocol>> PROTOCOL_COLOR {
         +{abstract} name: str
         +{abstract} description: str
         +{abstract} args_type: type
         +{abstract} return_type: type
         +{abstract} run_json(args: str, cancellation_token): str
+    }
+
+    interface StreamTool <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} run_stream(args, cancellation_token): AsyncGenerator
+    }
+
+    class ToolSchema CORE_COLOR {
+        +name: str
+        +description: str
+        +parameters: ParametersSchema
+    }
+
+    class ParametersSchema CORE_COLOR {
+        +type: str
+        +properties: Dict
+        +required: List[str]
+    }
+
+    abstract class BaseTool CORE_COLOR {
+        +{abstract} name: str
+        +{abstract} description: str
+        +{abstract} args_type: type
+        +{abstract} return_type: type
+        +run_json(args: str, cancellation_token): str
         +{abstract} run(args, cancellation_token): Any
-        +{abstract} to_tool_schema(): ToolSchema
-    }
-    class BaseToolWithState {
-    }
-    class BaseStreamTool {}
-    class FunctionTool {
-    }
-    class PythonCodeExecutionTool {
+        +to_tool_schema(): ToolSchema
     }
 
-    BaseTool <|-- PythonCodeExecutionTool
-    BaseTool <|-- FunctionTool
-    BaseTool <|-- BaseStreamTool
-    BaseTool <|-- BaseToolWithState
-    BaseTool <|-- AgentTool
-    BaseTool <|-- MCPTool
-}
-
-class TeamTaskResult {
-    +messages: Sequence<BaseChatMessage>
-    +stop_reason: str | None
-    +participant_results: Dict<str, TaskResult>
-    +conversation_history: List<BaseChatMessage>
-    +__init__(messages, stop_reason, participant_results, conversation_history)
-}
-
-interface ChatAgent <<Protocol>> {
-    +name: str
-    +description: str
-    +run(task: str, cancellation_token): TaskResult
-}
-
-class TaskResult {
-    +messages: Sequence<BaseChatMessage>
-    +stop_reason: str | None
-    +__init__(messages, stop_reason)
-}
-
-class ToolSchema {
-    +name: str
-    +description: str
-    +parameters: Dict
-    +__init__(name, description, parameters)
-}
-
-class FunctionCall {
-    +id: str
-    +name: str
-    +arguments: str
-    +__init__(id, name, arguments)
-}
-
-class FunctionExecutionResult {
-    +content: str
-    +call_id: str
-    +__init__(content: str, call_id: str)
-}
-
-
-' ============ MCP (Model Context Protocol) COMPONENTS ============
-
-class MCPToolDefinition {
-    +name: str
-    +description: str
-    +input_schema: Dict
-    +__init__(name, description, input_schema)
-}
-
-class MCPToolResult {
-    +content: str | List
-    +is_error: bool
-    +__init__(content, is_error)
-}
-
-class MCPResource {
-    +uri: str
-    +name: str
-    +description: str
-    +mime_type: str
-    +__init__(uri, name, description, mime_type)
-}
-
-class MCPResourceContent {
-    +uri: str
-    +content: str | bytes
-    +mime_type: str
-    +__init__(uri, content, mime_type)
-}
-rectangle "model context protocol" #FFB1C1 {
-
-    interface MCPClient <<Protocol>> {
-        +{abstract} list_tools(): List<MCPToolDefinition>
-        +{abstract} call_tool(tool_name: str, arguments: Dict): MCPToolResult
-        +{abstract} list_resources(): List<MCPResource>
-        +{abstract} read_resource(uri: str): MCPResourceContent
-        +{abstract} connect(): None
-        +{abstract} disconnect(): None
+    class BaseToolWithState CORE_COLOR {
+        +save_state(): Mapping
+        +load_state(state: Mapping)
     }
 
-    class StdioMCPClient {
-        #_command: str
-        #_args: List<str>
-        #_process: asyncio.subprocess.Process
-        #_connected: bool
-        +__init__(command: str, args: List<str>)
-        +list_tools(): List<MCPToolDefinition>
-        +call_tool(tool_name: str, arguments: Dict): MCPToolResult
-        +list_resources(): List<MCPResource>
-        +read_resource(uri: str): MCPResourceContent
-        +connect(): None
-        +disconnect(): None
+    class BaseStreamTool CORE_COLOR {
+        +run_stream(args, cancellation_token): AsyncGenerator
     }
 
-    class HttpMCPClient {
-        #_base_url: str
-        #_headers: Dict
-        #_session: aiohttp.ClientSession
-        +__init__(base_url: str, headers: Dict)
-        +list_tools(): List<MCPToolDefinition>
-        +call_tool(tool_name: str, arguments: Dict): MCPToolResult
-        +list_resources(): List<MCPResource>
-        +read_resource(uri: str): MCPResourceContent
-        +connect(): None
-        +disconnect(): None
+    class FunctionTool CORE_COLOR {
+        #_func: Callable
+        #_name: str
+        #_description: str
+        +__init__(func, name, description)
+        +run(args, cancellation_token): Any
+    }
+
+    class ToolResult CORE_COLOR {
+        +content: List[TextResultContent | ImageResultContent]
+    }
+
+    class TextResultContent CORE_COLOR {
+        +text: str
+    }
+
+    class ImageResultContent CORE_COLOR {
+        +image: Image
+    }
+
+    abstract class Workbench CORE_COLOR {
+        +{abstract} list_tools(): List[ToolSchema]
+        +{abstract} call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+        +{abstract} start()
+        +{abstract} stop()
+        +{abstract} reset()
+        +{abstract} save_state(): Mapping
+        +{abstract} load_state(state: Mapping)
+    }
+
+    class StaticWorkbench CORE_COLOR {
+        #_tools: List[Tool]
+        +__init__(tools: List[Tool])
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    }
+
+    class StaticStreamWorkbench CORE_COLOR {
+        #_tools: List[Tool | StreamTool]
+        +__init__(tools: List[Tool | StreamTool])
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    }
+
+    class ToolOverride CORE_COLOR {
+        +name: str
+        +description: str | None
+        +parameters: ParametersSchema | None
     }
 }
-MCPClient <|.. StdioMCPClient
-MCPClient <|.. HttpMCPClient
-MCPClient ..> MCPToolDefinition : provides
-MCPClient ..> MCPToolResult : produces
-MCPClient ..> MCPResource : provides
-MCPClient ..> MCPResourceContent : produces
 
-MCPTool o-- MCPClient : uses
+Tool <|.. BaseTool
+BaseTool <|-- BaseToolWithState
+BaseTool <|-- BaseStreamTool
+BaseTool <|-- FunctionTool
+StreamTool <|.. BaseStreamTool
 
-' ============ CODE EXECUTOR HIERARCHY ============
-rectangle "code executor base" #90EE90 {
+Tool ..> ToolSchema : creates
+BaseTool ..> ToolResult : produces
+ToolResult *-- TextResultContent
+ToolResult *-- ImageResultContent
 
-    interface CodeExecutor <<Protocol>> {
+Workbench <|-- StaticWorkbench
+Workbench <|-- StaticStreamWorkbench
+ComponentBase <|.. Workbench
+Component <|.. StaticWorkbench
+
+StaticWorkbench o-- Tool : manages
+StaticStreamWorkbench o-- Tool : manages
+StaticStreamWorkbench o-- StreamTool : manages
+
+' ============================================================================
+' TOOL AGENT
+' ============================================================================
+
+package "autogen_core.tool_agent" <<Rectangle>> {
+
+    class ToolAgent CORE_COLOR {
+        #_tools: List[Tool]
+        +__init__(name: str, tools: List[Tool])
+        +on_message(message, ctx: MessageContext)
+    }
+
+    class ToolException CORE_COLOR {
+        +message: str
+    }
+
+    class ToolNotFoundException CORE_COLOR {
+        +tool_name: str
+    }
+
+    class InvalidToolArgumentsException CORE_COLOR {
+        +tool_name: str
+        +arguments: str
+    }
+
+    class ToolExecutionException CORE_COLOR {
+        +tool_name: str
+        +error: Exception
+    }
+}
+
+BaseAgent <|-- ToolAgent
+ToolException <|-- ToolNotFoundException
+ToolException <|-- InvalidToolArgumentsException
+ToolException <|-- ToolExecutionException
+
+' ============================================================================
+' CODE EXECUTOR
+' ============================================================================
+
+package "autogen_core.code_executor" <<Rectangle>> {
+
+    interface CodeExecutor <<Protocol>> PROTOCOL_COLOR {
         +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
-        +{abstract} restart(): None
-        +{abstract} stop(): None
+        +{abstract} restart()
+        +{abstract} stop()
     }
 
-    class LocalCommandLineCodeExecutor {
+    class CodeBlock CORE_COLOR {
+        +language: str
+        +code: str
+    }
+
+    class CodeResult CORE_COLOR {
+        +exit_code: int
+        +output: str
+    }
+
+    class FunctionWithRequirements CORE_COLOR {
+        +func: Callable
+        +python_packages: List[str]
+        +global_imports: List[str]
+    }
+
+    class Alias CORE_COLOR {
+        +name: str
+        +alias: str
+    }
+
+    class ImportFromModule CORE_COLOR {
+        +module: str
+        +imports: List[str]
+    }
+}
+
+package "autogen_ext.code_executors" <<Rectangle>> {
+
+    class LocalCommandLineCodeExecutor EXTENSIONS_COLOR {
         #_work_dir: str
         #_timeout: int
-        #_virtual_env: str | None
         +__init__(work_dir, timeout, virtual_env)
         +execute_code_blocks(code_blocks, cancellation_token): CodeResult
-        +restart(): None
-        +stop(): None
     }
 
-    class DockerCommandLineCodeExecutor {
+    class DockerCommandLineCodeExecutor EXTENSIONS_COLOR {
         #_image: str
         #_container_name: str
-        #_timeout: int
-        #_work_dir: str
-        #_auto_remove: bool
         +__init__(image, container_name, timeout, work_dir, auto_remove)
         +execute_code_blocks(code_blocks, cancellation_token): CodeResult
-        +restart(): None
-        +stop(): None
+    }
+
+    class JupyterCodeExecutor EXTENSIONS_COLOR {
+        #_jupyter_client: JupyterClient
+        +__init__(jupyter_client)
+        +execute_code_blocks(code_blocks, cancellation_token): JupyterCodeResult
+    }
+
+    class DockerJupyterCodeExecutor EXTENSIONS_COLOR {
+        #_docker_jupyter_server: DockerJupyterServer
+        +__init__(image, container_name, timeout, work_dir)
+        +execute_code_blocks(code_blocks, cancellation_token): DockerJupyterCodeResult
+    }
+
+    class ACADynamicSessionsCodeExecutor EXTENSIONS_COLOR {
+        #_pool_endpoint: str
+        #_token_provider: TokenProvider
+        +__init__(pool_endpoint, token_provider)
+        +execute_code_blocks(code_blocks, cancellation_token): CodeResult
+    }
+
+    class PythonCodeExecutionTool EXTENSIONS_COLOR {
+        #_executor: CodeExecutor
+        +__init__(executor: CodeExecutor)
+        +run(code: str, cancellation_token): str
     }
 }
+
 CodeExecutor <|.. LocalCommandLineCodeExecutor
 CodeExecutor <|.. DockerCommandLineCodeExecutor
+CodeExecutor <|.. JupyterCodeExecutor
+CodeExecutor <|.. DockerJupyterCodeExecutor
+CodeExecutor <|.. ACADynamicSessionsCodeExecutor
 
-' ============ MEMORY HIERARCHY ============
-rectangle "memory base" #ADD8E6 {
-    abstract class Memory {
-        +{abstract} add(message: BaseChatMessage): None
-        +{abstract} get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
-        +{abstract} clear(): None
+BaseTool <|-- PythonCodeExecutionTool
+PythonCodeExecutionTool o-- CodeExecutor : uses
+
+' ============================================================================
+' MEMORY SYSTEM
+' ============================================================================
+
+package "autogen_core.memory" <<Rectangle>> {
+
+    interface Memory <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} add(message, cancellation_token)
+        +{abstract} query(query: str, cancellation_token): MemoryQueryResult
+        +{abstract} clear()
+        +{abstract} close()
     }
 
-    class ChatHistoryMemory {
-        #_max_messages: int | None
-        #_messages: List<BaseChatMessage>
-        +__init__(max_messages: int | None)
-        +add(message: BaseChatMessage): None
-        +get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
-        +clear(): None
+    class MemoryContent CORE_COLOR {
+        +content: str
+        +mime_type: MemoryMimeType
     }
 
-    class SummaryMemory {
-        #_model_client: ChatCompletionClient
-        #_summary_prompt: str
-        #_summary: str | None
-        #_max_messages: int
-        +__init__(model_client, summary_prompt, max_messages)
-        +add(message: BaseChatMessage): None
-        +get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
-        +clear(): None
+    class MemoryQueryResult CORE_COLOR {
+        +results: List[MemoryContent]
+    }
+
+    class UpdateContextResult CORE_COLOR {
+        +updated_context: List
+    }
+
+    enum MemoryMimeType CORE_COLOR {
+        TEXT
+        IMAGE
+        AUDIO
+        VIDEO
+    }
+
+    class ListMemory CORE_COLOR {
+        #_memories: List
+        +add(message, cancellation_token)
+        +query(query: str, cancellation_token): MemoryQueryResult
+        +clear()
     }
 }
 
-Memory <|-- ChatHistoryMemory
-Memory <|-- SummaryMemory
-SummaryMemory o-- ChatCompletionClient : uses
+Memory <|.. ListMemory
 
-' ============ CHAT COMPLETION CONTEXT ============
+package "autogen_ext.memory" <<Rectangle>> {
 
-class ChatCompletionContext {
-    #_messages: List<BaseModel>
-    #_max_messages: int | None
-    +__init__(messages: List<BaseModel>, max_messages: int | None)
-    +add_message(message: LLMMessage): None
-    +get_messages(): List<BaseModel>
-    +clear(): None
-    +truncate(max_messages: int): None
-}
-
-' ============ WORKBENCH HIERARCHY ============
-rectangle "base workbench" #F0E68C {
-    abstract class BaseWorkbench {
-        +{abstract} root_dir: str
-        +{abstract} working_dir: str
-        +{abstract} create_file(path: str, content: str): str
-        +{abstract} read_file(path: str): str
-        +{abstract} write_file(path: str, content: str): str
-        +{abstract} delete_file(path: str): None
-        +{abstract} list_files(pattern: str): List<str>
-        +{abstract} get_absolute_path(path: str): str
-        +{abstract} exists(path: str): bool
-        +{abstract} mkdir(path: str, parents: bool): str
-        +{abstract} move_file(src: str, dst: str): str
-        +{abstract} copy_file(src: str, dst: str): str
-        +{abstract} get_file_info(path: str): FileInfo
-        +{abstract} save_state(): WorkbenchState
-        +{abstract} load_state(state: WorkbenchState): None
+    class ChromaDBVectorMemory EXTENSIONS_COLOR {
+        #_client: chromadb.Client
+        #_collection_name: str
+        +add(message, cancellation_token)
+        +query(query: str, cancellation_token): MemoryQueryResult
     }
 
-    class Workbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_security_manager: SecurityManager
-        +__init__(root_dir: str, security_manager: SecurityManager)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
+    class Mem0Memory EXTENSIONS_COLOR {
+        #_mem0_client: Mem0Client
+        +add(message, cancellation_token)
+        +query(query: str, cancellation_token): MemoryQueryResult
     }
 
-    class MCPWorkbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_mcp_client: MCPClient
-        #_resource_prefix: str
-        +__init__(mcp_client: MCPClient, resource_prefix: str)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
+    class RedisMemory EXTENSIONS_COLOR {
+        #_redis_client: Redis
+        +add(message, cancellation_token)
+        +query(query: str, cancellation_token): MemoryQueryResult
     }
 
-    class GitWorkbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_base_workbench: BaseWorkbench
-        #_repo: git.Repo
-        #_auto_commit: bool
-        +__init__(base_workbench: BaseWorkbench, auto_commit: bool)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +commit(message: str): str
-        +create_branch(branch_name: str): None
-        +checkout(branch_name: str): None
-        +diff(commit1: str, commit2: str): str
-        +rollback(commit_hash: str): None
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
-    }
-
-    class SandboxWorkbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_base_workbench: BaseWorkbench
-        #_allowed_paths: List<str>
-        #_blocked_paths: List<str>
-        #_read_only_paths: List<str>
-        #_max_file_size: int
-        +__init__(base_workbench: BaseWorkbench, allowed_paths, blocked_paths, read_only_paths, max_file_size)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +_validate_path(path: str): bool
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
-    }
-
-    class EnvironmentWorkbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_base_workbench: BaseWorkbench
-        #_env_vars: Dict<str, str>
-        #_config_files: Dict<str, str>
-        #_secrets_manager: SecretsManager
-        +__init__(base_workbench: BaseWorkbench, secrets_manager: SecretsManager)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +set_env_var(key: str, value: str): None
-        +get_env_var(key: str): str
-        +load_config(path: str): Dict
-        +save_config(path: str, config: Dict): None
-        +get_secret(key: str): str
-        +set_secret(key: str, value: str): None
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
-    }
-
-    class BuildWorkbench {
-        +{static} component_type: ClassVar<ComponentType>
-        +root_dir: str
-        +working_dir: str
-        #_base_workbench: BaseWorkbench
-        #_build_system: str
-        #_build_config: Dict
-        +__init__(base_workbench: BaseWorkbench, build_system: str)
-        +create_file(path: str, content: str): str
-        +read_file(path: str): str
-        +write_file(path: str, content: str): str
-        +delete_file(path: str): None
-        +list_files(pattern: str): List<str>
-        +get_absolute_path(path: str): str
-        +exists(path: str): bool
-        +mkdir(path: str, parents: bool): str
-        +move_file(src: str, dst: str): str
-        +copy_file(src: str, dst: str): str
-        +get_file_info(path: str): FileInfo
-        +build(target: str): BuildResult
-        +test(test_pattern: str): TestResult
-        +install_dependencies(): None
-        +run_linter(): LintResult
-        +format_code(): None
-        +save_state(): WorkbenchState
-        +load_state(state: WorkbenchState): None
+    class TextCanvasMemory EXTENSIONS_COLOR {
+        #_canvas: TextCanvas
+        +add(message, cancellation_token)
+        +query(query: str, cancellation_token): MemoryQueryResult
     }
 }
-class FileInfo {
-    +path: str
-    +size: int
-    +created_at: datetime
-    +modified_at: datetime
-    +is_directory: bool
-    +permissions: str
-    +__init__(path, size, created_at, modified_at, is_directory, permissions)
+
+Memory <|.. ChromaDBVectorMemory
+Memory <|.. Mem0Memory
+Memory <|.. RedisMemory
+Memory <|.. TextCanvasMemory
+
+' ============================================================================
+' MODEL CONTEXT
+' ============================================================================
+
+package "autogen_core.model_context" <<Rectangle>> {
+
+    interface ChatCompletionContext <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} get_messages(): List
+        +{abstract} add_message(message)
+        +{abstract} clear()
+    }
+
+    class ChatCompletionContextState CORE_COLOR {
+        +messages: List
+    }
+
+    class UnboundedChatCompletionContext CORE_COLOR {
+        #_messages: List
+        +get_messages(): List
+        +add_message(message)
+        +clear()
+    }
+
+    class BufferedChatCompletionContext CORE_COLOR {
+        #_messages: List
+        #_buffer_size: int
+        +get_messages(): List
+        +add_message(message)
+    }
+
+    class TokenLimitedChatCompletionContext CORE_COLOR {
+        #_messages: List
+        #_max_tokens: int
+        +get_messages(): List
+        +add_message(message)
+    }
+
+    class HeadAndTailChatCompletionContext CORE_COLOR {
+        #_head_messages: List
+        #_tail_messages: List
+        #_head_size: int
+        #_tail_size: int
+        +get_messages(): List
+        +add_message(message)
+    }
 }
 
-class WorkbenchState {
-    +working_dir: str
-    +file_tree: Dict
-    +metadata: Dict
-    +timestamp: datetime
-    +__init__(working_dir, file_tree, metadata, timestamp)
+ChatCompletionContext <|.. UnboundedChatCompletionContext
+ChatCompletionContext <|.. BufferedChatCompletionContext
+ChatCompletionContext <|.. TokenLimitedChatCompletionContext
+ChatCompletionContext <|.. HeadAndTailChatCompletionContext
+
+' ============================================================================
+' MCP INTEGRATION
+' ============================================================================
+
+package "autogen_ext.tools.mcp" <<Rectangle>> {
+
+    class StdioMcpToolAdapter EXTENSIONS_COLOR {
+        #_server_params: StdioServerParams
+        #_session: McpSession
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    }
+
+    class SseMcpToolAdapter EXTENSIONS_COLOR {
+        #_server_params: SseServerParams
+        #_session: McpSession
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    }
+
+    class StreamableHttpMcpToolAdapter EXTENSIONS_COLOR {
+        #_server_params: StreamableHttpServerParams
+        #_session: McpSession
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    }
+
+    class McpSessionActor EXTENSIONS_COLOR {
+        #_session: McpSession
+        +on_message(message, ctx: MessageContext)
+    }
+
+    class McpWorkbench EXTENSIONS_COLOR {
+        #_adapters: List[StdioMcpToolAdapter | SseMcpToolAdapter]
+        +list_tools(): List[ToolSchema]
+        +call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+        +start()
+        +stop()
+    }
+
+    class StdioServerParams EXTENSIONS_COLOR {
+        +command: str
+        +args: List[str]
+        +env: Dict | None
+    }
+
+    class SseServerParams EXTENSIONS_COLOR {
+        +url: str
+        +headers: Dict | None
+    }
+
+    class StreamableHttpServerParams EXTENSIONS_COLOR {
+        +url: str
+        +headers: Dict | None
+    }
 }
 
-class SecurityManager {
-    #_allowed_operations: Set<str>
-    #_path_validator: PathValidator
-    +__init__(allowed_operations: Set, path_validator: PathValidator)
-    +validate_operation(operation: str, path: str): bool
-    +sanitize_path(path: str): str
+Workbench <|-- McpWorkbench
+BaseAgent <|-- McpSessionActor
+Component <|.. McpWorkbench
+
+McpWorkbench o-- StdioMcpToolAdapter : uses
+McpWorkbench o-- SseMcpToolAdapter : uses
+
+' ============================================================================
+' OTHER EXTENSION TOOLS
+' ============================================================================
+
+package "autogen_ext.tools" <<Rectangle>> {
+
+    class LangChainToolAdapter EXTENSIONS_COLOR {
+        #_langchain_tool: BaseTool
+        +run(args, cancellation_token): Any
+    }
+
+    class HttpTool EXTENSIONS_COLOR {
+        #_method: str
+        #_url: str
+        +run(args, cancellation_token): str
+    }
+
+    class AzureAISearchTool EXTENSIONS_COLOR {
+        #_search_client: SearchClient
+        +run(query: str, cancellation_token): SearchResults
+    }
 }
 
-class SecretsManager {
-    #_secrets_store: Dict<str, str>
-    #_encryption_key: bytes
-    +__init__(encryption_key: bytes)
-    +get_secret(key: str): str
-    +set_secret(key: str, value: str): None
-    +delete_secret(key: str): None
-    +list_secrets(): List<str>
+BaseTool <|-- LangChainToolAdapter
+BaseTool <|-- HttpTool
+BaseTool <|-- AzureAISearchTool
+
+' ============================================================================
+' AGENTCHAT BASE
+' ============================================================================
+
+package "autogen_agentchat.base" <<Rectangle>> {
+
+    interface ChatAgent <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} name: str
+        +{abstract} description: str
+        +{abstract} produced_message_types: Sequence[type]
+        +{abstract} on_messages(messages, cancellation_token): Response
+        +{abstract} on_messages_stream(messages, cancellation_token): AsyncGenerator
+    }
+
+    abstract class BaseChatAgent AGENTCHAT_COLOR {
+        #_name: str
+        #_description: str
+        +__init__(name: str, description: str)
+        +name: str
+        +description: str
+        +{abstract} produced_message_types: Sequence[type]
+        +{abstract} on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +{abstract} on_reset(cancellation_token)
+        +on_pause(cancellation_token)
+        +on_resume(cancellation_token)
+        +save_state(): Mapping
+        +load_state(state: Mapping)
+        +run(task, cancellation_token, output_task_messages): TaskResult
+        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+    }
+
+    class Response AGENTCHAT_COLOR {
+        +chat_message: BaseChatMessage
+        +inner_messages: List | None
+    }
+
+    class TaskResult AGENTCHAT_COLOR {
+        +messages: Sequence[BaseChatMessage]
+        +stop_reason: str | None
+    }
+
+    interface TaskRunner <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} run(task, cancellation_token, output_task_messages): TaskResult
+        +{abstract} run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+    }
+
+    interface Team <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} name: str
+        +{abstract} description: str
+        +{abstract} run(task, cancellation_token, output_task_messages): TaskResult
+        +{abstract} run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+    }
+
+    class Handoff AGENTCHAT_COLOR {
+        +target: str
+        +message: str
+        +condition: Callable | None
+    }
+
+    abstract class TerminationCondition AGENTCHAT_COLOR {
+        +{abstract} terminated: bool
+        +{abstract} __call__(messages): StopMessage | None
+        +{abstract} reset()
+        +__or__(other): OrTerminationCondition
+        +__and__(other): AndTerminationCondition
+    }
+
+    class AndTerminationCondition AGENTCHAT_COLOR {
+        #_conditions: List[TerminationCondition]
+    }
+
+    class OrTerminationCondition AGENTCHAT_COLOR {
+        #_conditions: List[TerminationCondition]
+    }
 }
 
-class BuildResult {
-    +success: bool
-    +output: str
-    +errors: List<str>
-    +duration: float
-    +__init__(success, output, errors, duration)
-}
+ChatAgent <|.. BaseChatAgent
+TaskRunner <|.. BaseChatAgent
+ComponentBase <|.. BaseChatAgent
 
-class TestResult {
-    +success: bool
-    +passed: int
-    +failed: int
-    +skipped: int
-    +output: str
-    +__init__(success, passed, failed, skipped, output)
-}
+BaseChatAgent ..> Response : produces
+BaseChatAgent ..> TaskResult : produces
 
-class LintResult {
-    +issues: List<LintIssue>
-    +total_issues: int
-    +__init__(issues, total_issues)
-}
+' ============================================================================
+' AGENTCHAT MESSAGES
+' ============================================================================
 
-class LintIssue {
-    +file: str
-    +line: int
-    +column: int
-    +severity: str
-    +message: str
-    +__init__(file, line, column, severity, message)
-}
+package "autogen_agentchat.messages" <<Rectangle>> {
 
-BaseWorkbench <|-- Workbench
-BaseWorkbench <|-- MCPWorkbench
-BaseWorkbench <|-- GitWorkbench
-BaseWorkbench <|-- SandboxWorkbench
-BaseWorkbench <|-- EnvironmentWorkbench
-BaseWorkbench <|-- BuildWorkbench
-
-ComponentBase <|.. BaseWorkbench
-Component <|.. Workbench
-Component <|.. MCPWorkbench
-Component <|.. GitWorkbench
-Component <|.. SandboxWorkbench
-Component <|.. EnvironmentWorkbench
-Component <|.. BuildWorkbench
-
-Workbench o-- SecurityManager : uses
-MCPWorkbench o-- MCPClient : uses
-GitWorkbench o-- BaseWorkbench : wraps
-SandboxWorkbench o-- BaseWorkbench : wraps
-EnvironmentWorkbench o-- BaseWorkbench : wraps
-EnvironmentWorkbench o-- SecretsManager : uses
-BuildWorkbench o-- BaseWorkbench : wraps
-
-BaseWorkbench ..> FileInfo : produces
-BaseWorkbench ..> WorkbenchState : produces
-BuildWorkbench ..> BuildResult : produces
-BuildWorkbench ..> TestResult : produces
-BuildWorkbench ..> LintResult : produces
-
-WorkbenchTool o-- BaseWorkbench : uses
-
-' ============ MESSAGE HIERARCHY ============
-rectangle "Base Message" #LightGreen {
-
-    abstract class BaseMessage {
+    abstract class BaseMessage AGENTCHAT_COLOR {
         +source: str
         +models_usage: RequestUsage | None
         +metadata: Dict
         +type: str
+    }
+
+    abstract class BaseChatMessage AGENTCHAT_COLOR {
+        +source: str
+        +models_usage: RequestUsage | None
+        +metadata: Dict
         +{abstract} to_text(): str
         +{abstract} to_model_text(): str
         +{abstract} to_model_message(): LLMMessage
     }
 
-    abstract class BaseChatMessage {
+    abstract class BaseAgentEvent AGENTCHAT_COLOR {
         +source: str
-        +models_usage: RequestUsage | None
         +metadata: Dict
-        +type: str
-        +{abstract} to_text(): str
-        +{abstract} to_model_text(): str
-        +{abstract} to_model_message(): LLMMessage
     }
 
-    class BaseTextChatMessage extends BaseChatMessage, ABC {
+    abstract class BaseTextChatMessage AGENTCHAT_COLOR {
         +content: str
         +to_text(): str
         +to_model_text(): str
-        +to_model_message(): UserMessage
     }
 
-    BaseMessage <|-- BaseChatMessage
-    BaseChatMessage <|-- BaseTextChatMessage
-
-    class TextMessage {
+    class TextMessage AGENTCHAT_COLOR {
         +content: str
-        +__init__(content: str, source: str, models_usage: RequestUsage)
+        +source: str
     }
 
-    class MultiModalMessage {
-        +content: List<str | Image>
-        +__init__(content: List, source: str, models_usage: RequestUsage)
+    class MultiModalMessage AGENTCHAT_COLOR {
+        +content: List[str | Image]
         +to_text(): str
-        +to_model_text(): str
-        +to_model_message(): UserMessage
     }
 
-    class StopMessage {
+    class StopMessage AGENTCHAT_COLOR {
         +content: str
-        +__init__(content: str, source: str)
     }
 
-    class HandoffMessage {
+    class HandoffMessage AGENTCHAT_COLOR {
         +content: str
         +target: str
-        +context: List<BaseModel>
-        +__init__(content: str, target: str, source: str, context: List)
+        +context: List
     }
 
-    class ToolCallSummaryMessage {
+    class ToolCallSummaryMessage AGENTCHAT_COLOR {
         +content: str
         +call_id: str
-        +__init__(content: str, call_id: str, source: str)
     }
 
-    class StructuredMessage<T> {
+    class StructuredMessage<T> AGENTCHAT_COLOR {
         +content: T
         +format_string: str | None
-        +__init__(content: T, source: str, format_string: str)
-        +to_text(): str
     }
 
-    abstract class BaseAgentEvent {
-        +source: str
-        +metadata: Dict
-        +type: str
+    class ToolCallRequestEvent AGENTCHAT_COLOR {
+        +content: List[FunctionCall]
     }
 
-    class ToolCallRequestEvent {
-        +content: str
-        +__init__(content: str, source: str)
+    class ToolCallExecutionEvent AGENTCHAT_COLOR {
+        +content: List[FunctionExecutionResult]
     }
 
-    class ToolCallExecutionEvent {
-        +content: List<FunctionExecutionResult>
-        +__init__(content: List, source: str)
-    }
-
-    class MemoryQueryEvent {
+    class MemoryQueryEvent AGENTCHAT_COLOR {
         +query: str
-        +__init__(query: str, source: str)
+        +results: List
     }
 
-    class UserInputRequestedEvent {
+    class UserInputRequestedEvent AGENTCHAT_COLOR {
         +prompt: str
-        +__init__(prompt: str, source: str)
     }
 
-    class ModelClientStreamingChunkEvent {
+    class ModelClientStreamingChunkEvent AGENTCHAT_COLOR {
         +content: str
-        +__init__(content: str, source: str)
     }
 
-    class ThoughtEvent {
+    class ThoughtEvent AGENTCHAT_COLOR {
         +thought: str
-        +__init__(thought: str, source: str)
     }
 
-    class SelectSpeakerEvent {
-        +speaker: str
-        +__init__(speaker: str, source: str)
+    class SelectSpeakerEvent AGENTCHAT_COLOR {
+        +selected_speaker: str
     }
 
-    class CodeGenerationEvent {
+    class CodeGenerationEvent AGENTCHAT_COLOR {
         +code: str
-        +__init__(code: str, source: str)
     }
 
-    class CodeExecutionEvent {
-        +result: str
-        +__init__(result: str, source: str)
+    class CodeExecutionEvent AGENTCHAT_COLOR {
+        +code_result: CodeResult
     }
 }
 
+BaseMessage <|-- BaseChatMessage
 BaseMessage <|-- BaseAgentEvent
-BaseTextChatMessage <|-- HandoffMessage
-BaseTextChatMessage <|-- StopMessage
+BaseChatMessage <|-- BaseTextChatMessage
 BaseTextChatMessage <|-- TextMessage
+BaseTextChatMessage <|-- StopMessage
+BaseTextChatMessage <|-- HandoffMessage
 BaseTextChatMessage <|-- ToolCallSummaryMessage
-BaseChatMessage <|-- StructuredMessage
 BaseChatMessage <|-- MultiModalMessage
+BaseChatMessage <|-- StructuredMessage
 BaseAgentEvent <|-- ToolCallRequestEvent
 BaseAgentEvent <|-- ToolCallExecutionEvent
 BaseAgentEvent <|-- MemoryQueryEvent
@@ -882,490 +1072,561 @@ BaseAgentEvent <|-- SelectSpeakerEvent
 BaseAgentEvent <|-- CodeGenerationEvent
 BaseAgentEvent <|-- CodeExecutionEvent
 
-' ============ CONCRETE AGENT IMPLEMENTATIONS ============
+' ============================================================================
+' AGENTCHAT AGENTS
+' ============================================================================
 
-' ============ BASE AGENT CLASS ============
+package "autogen_agentchat.agents" <<Rectangle>> {
 
-rectangle "base chat agent" #FFA07A {
-    abstract class BaseChatAgent {
-        +{static} component_type: ClassVar<ComponentType>
-        #_name: str
-        #_description: str
-        +__init__(name: str, description: str)
-        +name: str
-        +description: str
-        +{abstract} produced_message_types: Sequence<type>
-        +{abstract} on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +{abstract} on_reset(cancellation_token): None
-        +on_pause(cancellation_token): None
-        +on_resume(cancellation_token): None
-        +save_state(): Mapping
-        +load_state(state): None
-        +close(): None
-        +run(task, cancellation_token, output_task_messages): TaskResult
-        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
-    }
-
-    class AssistantAgent {
-        +{static} component_version: ClassVar<int>
-        +{static} component_provider_override: ClassVar<str>
+    class AssistantAgent AGENTCHAT_COLOR {
         #_model_client: ChatCompletionClient
-        #_tools: List<BaseTool>
+        #_tools: List[Tool]
         #_workbench: Workbench | None
-        #_handoffs: List<Handoff>
         #_model_context: ChatCompletionContext
+        #_memory: Memory | None
         #_system_message: str
-        #_reflect_on_tool_use: bool
-        #_max_tool_iterations: int
-        #_tool_call_summary_formatter: Callable
-        #_output_content_type: type<BaseModel> | None
-        #_memory: Sequence<Memory>
-        +__init__(name, model_client, tools, workbench, handoffs, ...)
-        +produced_message_types: Sequence<type>
-        +model_context: ChatCompletionContext
+        +__init__(name, model_client, tools, workbench, system_message, model_context, memory)
         +on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +on_reset(cancellation_token): None
-        +save_state(): Mapping
-        +load_state(state): None
+        +produced_message_types: Sequence[type]
     }
 
-    class CodeExecutorAgent {
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_TERMINAL_DESCRIPTION: str
-        +{static} DEFAULT_AGENT_DESCRIPTION: str
-        +{static} DEFAULT_SYSTEM_MESSAGE: str
-        +{static} NO_CODE_BLOCKS_FOUND_MESSAGE: str
-        +{static} DEFAULT_SUPPORTED_LANGUAGES: List<str>
+    class CodeExecutorAgent AGENTCHAT_COLOR {
         #_code_executor: CodeExecutor
         #_model_client: ChatCompletionClient | None
-        #_model_context: ChatCompletionContext | None
-        #_max_retries_on_error: int
-        #_sources: Sequence<str>
-        #_supported_languages: List<str>
-        #_approval_func: Callable
-        +__init__(name, code_executor, model_client, ...)
-        +produced_message_types: Sequence<type>
-        +model_context: ChatCompletionContext
+        +__init__(name, code_executor, model_client)
         +on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +extract_code_blocks_from_messages(messages): List<CodeBlock>
-        +execute_code_block(code_blocks, cancellation_token): CodeResult
-        +on_reset(cancellation_token): None
+        +produced_message_types: Sequence[type]
     }
 
-    class UserProxyAgent {
-        +{static} component_type: ClassVar<ComponentType>
-        +{static} component_provider_override: ClassVar<str>
-        #_input_func: InputFuncType
+    class UserProxyAgent AGENTCHAT_COLOR {
+        #_input_func: Callable | None
         +__init__(name, description, input_func)
-        +produced_message_types: Sequence<type>
         +on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +on_reset(cancellation_token): None
+        +produced_message_types: Sequence[type]
     }
 
-    class SocietyOfMindAgent {
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_INSTRUCTION: str
-        +{static} DEFAULT_RESPONSE_PROMPT: str
-        +{static} DEFAULT_DESCRIPTION: str
+    class SocietyOfMindAgent AGENTCHAT_COLOR {
         #_team: Team
         #_model_client: ChatCompletionClient
-        #_instruction: str
-        #_response_prompt: str
-        #_model_context: ChatCompletionContext
-        +__init__(name, team, model_client, ...)
-        +produced_message_types: Sequence<type>
-        +model_context: ChatCompletionContext
+        +__init__(name, team, model_client)
         +on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +on_reset(cancellation_token): None
-        +save_state(): Mapping
-        +load_state(state): None
+        +produced_message_types: Sequence[type]
+    }
+
+    class MessageFilterAgent AGENTCHAT_COLOR {
+        #_config: MessageFilterConfig
+        +__init__(name, config)
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class MessageFilterConfig AGENTCHAT_COLOR {
+        +allowed_types: List[type]
+        +per_source_filters: List[PerSourceFilter]
+    }
+
+    class PerSourceFilter AGENTCHAT_COLOR {
+        +source: str
+        +allowed_types: List[type]
+    }
+
+    class ApprovalRequest AGENTCHAT_COLOR {
+        +code: str
+        +context: List
+    }
+
+    class ApprovalResponse AGENTCHAT_COLOR {
+        +approved: bool
+        +reason: str | None
     }
 }
-TaskRunner <|.. BaseChatAgent
-ChatAgent <|.. BaseChatAgent
-ABC <|-- BaseChatAgent
-ComponentBase <|.. BaseChatAgent
 
 BaseChatAgent <|-- AssistantAgent
-Component <|.. AssistantAgent
-
 BaseChatAgent <|-- CodeExecutorAgent
-Component <|.. CodeExecutorAgent
-
 BaseChatAgent <|-- UserProxyAgent
-Component <|.. UserProxyAgent
-
 BaseChatAgent <|-- SocietyOfMindAgent
+BaseChatAgent <|-- MessageFilterAgent
+
+Component <|.. AssistantAgent
+Component <|.. CodeExecutorAgent
+Component <|.. UserProxyAgent
 Component <|.. SocietyOfMindAgent
 
-' Agent compositions
 AssistantAgent o-- ChatCompletionClient : uses
-AssistantAgent o-- BaseTool : uses
+AssistantAgent o-- Tool : uses
 AssistantAgent o-- Workbench : uses
 AssistantAgent o-- ChatCompletionContext : uses
 AssistantAgent o-- Memory : uses
 
 CodeExecutorAgent o-- CodeExecutor : uses
 CodeExecutorAgent o-- ChatCompletionClient : uses
-CodeExecutorAgent o-- ChatCompletionContext : uses
 
+SocietyOfMindAgent o-- Team : uses
 SocietyOfMindAgent o-- ChatCompletionClient : uses
-SocietyOfMindAgent o-- ChatCompletionContext : uses
 
-' ============ RESPONSE AND RESULT TYPES ============
+MessageFilterAgent *-- MessageFilterConfig
 
-class Response {
-    +chat_message: BaseChatMessage
-    +inner_messages: List | None
-    +__init__(chat_message, inner_messages)
-}
+' ============================================================================
+' AGENTCHAT TOOLS
+' ============================================================================
 
-class TaskResult {
-    +messages: Sequence<BaseChatMessage>
-    +stop_reason: str | None
-    +__init__(messages, stop_reason)
-}
+package "autogen_agentchat.tools" <<Rectangle>> {
 
-' ============ TERMINATION CONDITIONS ============
-rectangle "termination condition base" #FFB6C1 {
-    abstract class TerminationCondition {
-        +{static} component_type: ClassVar<ComponentType>
-        +{abstract} terminated: bool
-        +{abstract} __call__(messages): StopMessage | None
-        +{abstract} reset(): None
-        +__or__(other): OrTerminationCondition
-        +__and__(other): AndTerminationCondition
+    class AgentTool AGENTCHAT_COLOR {
+        #_agent: ChatAgent
+        #_max_turns: int
+        +__init__(agent, max_turns)
+        +run(task: str, cancellation_token): str
     }
 
-    class MaxMessageTermination {
-        +{static} component_provider_override: ClassVar<str>
+    class TeamTool AGENTCHAT_COLOR {
+        #_team: Team
+        #_max_turns: int
+        +__init__(team, max_turns)
+        +run(task: str, cancellation_token): str
+    }
+}
+
+BaseTool <|-- AgentTool
+BaseTool <|-- TeamTool
+
+AgentTool o-- ChatAgent : wraps
+TeamTool o-- Team : wraps
+
+' ============================================================================
+' TERMINATION CONDITIONS
+' ============================================================================
+
+package "autogen_agentchat.conditions" <<Rectangle>> {
+
+    class MaxMessageTermination AGENTCHAT_COLOR {
         #_max_messages: int
-        #_message_count: int
-        #_terminated: bool
-        +__init__(max_messages: int)
-        +terminated: bool
+        #_current_count: int
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class TextMentionTermination {
-        +{static} component_provider_override: ClassVar<str>
+    class TextMentionTermination AGENTCHAT_COLOR {
         #_text: str
-        #_sources: List<str> | None
-        #_terminated: bool
-        +__init__(text: str, sources: List)
-        +terminated: bool
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class HandoffTermination {
-        +{static} component_provider_override: ClassVar<str>
+    class StopMessageTermination AGENTCHAT_COLOR {
+        +__call__(messages): StopMessage | None
+    }
+
+    class TokenUsageTermination AGENTCHAT_COLOR {
+        #_max_tokens: int
+        #_current_usage: int
+        +__call__(messages): StopMessage | None
+    }
+
+    class HandoffTermination AGENTCHAT_COLOR {
         #_target: str
-        #_terminated: bool
-        +__init__(target: str)
-        +terminated: bool
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class TokenUsageTermination {
-        +{static} component_provider_override: ClassVar<str>
-        #_max_prompt_tokens: int | None
-        #_max_completion_tokens: int | None
-        #_prompt_token_count: int
-        #_completion_token_count: int
-        #_terminated: bool
-        +__init__(max_prompt_tokens, max_completion_tokens)
-        +terminated: bool
+    class TimeoutTermination AGENTCHAT_COLOR {
+        #_timeout_seconds: float
+        #_start_time: float
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class ExternalTermination {
-        +{static} component_provider_override: ClassVar<str>
-        #_terminated: bool
-        +__init__()
-        +terminated: bool
-        +set(): None
+    class ExternalTermination AGENTCHAT_COLOR {
+        #_terminate_flag: bool
         +__call__(messages): StopMessage | None
-        +reset(): None
+        +set()
     }
 
-    class TextMessageTermination {
-        +{static} component_provider_override: ClassVar<str>
-        #_sources: List<str> | None
-        #_terminated: bool
-        +__init__(sources: List)
-        +terminated: bool
+    class SourceMatchTermination AGENTCHAT_COLOR {
+        #_sources: List[str]
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class FunctionCallTermination {
-        +{static} component_provider_override: ClassVar<str>
+    class TextMessageTermination AGENTCHAT_COLOR {
+        #_text: str
+        +__call__(messages): StopMessage | None
+    }
+
+    class FunctionCallTermination AGENTCHAT_COLOR {
         #_function_name: str
-        #_terminated: bool
-        +__init__(function_name: str)
-        +terminated: bool
         +__call__(messages): StopMessage | None
-        +reset(): None
     }
 
-    class OrTerminationCondition {
-        +{static} component_provider_override: ClassVar<str>
-        #_conditions: Tuple<TerminationCondition>
-        +__init__(*conditions)
-        +terminated: bool
+    class FunctionalTermination AGENTCHAT_COLOR {
+        #_condition_func: Callable
         +__call__(messages): StopMessage | None
-        +reset(): None
-    }
-
-    class AndTerminationCondition {
-        +{static} component_provider_override: ClassVar<str>
-        #_conditions: Tuple<TerminationCondition>
-        +__init__(*conditions)
-        +terminated: bool
-        +__call__(messages): StopMessage | None
-        +reset(): None
     }
 }
-
-ComponentBase <|.. TerminationCondition
-Component <|.. TerminationCondition
 
 TerminationCondition <|-- MaxMessageTermination
 TerminationCondition <|-- TextMentionTermination
-TerminationCondition <|-- HandoffTermination
+TerminationCondition <|-- StopMessageTermination
 TerminationCondition <|-- TokenUsageTermination
+TerminationCondition <|-- HandoffTermination
+TerminationCondition <|-- TimeoutTermination
 TerminationCondition <|-- ExternalTermination
+TerminationCondition <|-- SourceMatchTermination
 TerminationCondition <|-- TextMessageTermination
 TerminationCondition <|-- FunctionCallTermination
-TerminationCondition <|-- OrTerminationCondition
+TerminationCondition <|-- FunctionalTermination
 TerminationCondition <|-- AndTerminationCondition
+TerminationCondition <|-- OrTerminationCondition
 
-' ============ TEAM HIERARCHY ============
+Component <|.. TerminationCondition
 
-rectangle "group chat" #D1F7F3 {
+' ============================================================================
+' AGENTCHAT TEAMS
+' ============================================================================
 
-    interface Team <<Protocol>> {
-        +name: str
-        +description: str
-        +run(task, cancellation_token, output_task_messages): TaskResult
-        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
-        +reset(): None
-        +pause(): None
-        +resume(): None
-        +save_state(): Mapping
-        +load_state(state): None
-        +close(): None
-    }
+package "autogen_agentchat.teams" <<Rectangle>> {
 
-    abstract class BaseGroupChat {
-        #_name: str
-        #_description: str
-        #_participants: List<ChatAgent | Team>
-        #_participant_names: List<str>
+    abstract class BaseGroupChat AGENTCHAT_COLOR {
+        #_participants: List[ChatAgent]
         #_termination_condition: TerminationCondition | None
         #_max_turns: int | None
-        +__init__(participants, name, description, termination_condition, max_turns)
-        +name: str
-        +description: str
+        +__init__(participants, termination_condition, max_turns)
         +run(task, cancellation_token, output_task_messages): TaskResult
         +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
-        +reset(): None
-        +pause(): None
-        +resume(): None
+        +reset()
         +save_state(): Mapping
-        +load_state(state): None
-        +close(): None
+        +load_state(state: Mapping)
     }
 
-    class RoundRobinGroupChat {
-        +{static} component_config_schema: ClassVar<type>
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_NAME: str
-        +{static} DEFAULT_DESCRIPTION: str
-        #_next_speaker_index: int
-        +__init__(participants, name, description, termination_condition, max_turns, custom_message_types)
-        +_select_speaker(history): str
-        +_to_config(): RoundRobinGroupChatConfig
-        +_from_config(config): Self
+    class RoundRobinGroupChat AGENTCHAT_COLOR {
+        +__init__(participants, termination_condition, max_turns)
     }
 
-    class SelectorGroupChat {
-        +{static} component_config_schema: ClassVar<type>
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_NAME: str
-        +{static} DEFAULT_DESCRIPTION: str
-        +{static} DEFAULT_SELECTOR_PROMPT: str
+    class SelectorGroupChat AGENTCHAT_COLOR {
         #_model_client: ChatCompletionClient
         #_selector_prompt: str
-        #_allow_repeated_speaker: bool
-        #_selector_func: Callable | None
-        +__init__(participants, model_client, name, description, ...)
-        +_select_speaker(history): str
-        +_to_config(): SelectorGroupChatConfig
-        +_from_config(config): Self
+        +__init__(participants, model_client, termination_condition, selector_prompt, max_turns)
     }
 
-    class Swarm {
-        +{static} component_config_schema: ClassVar<type>
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_NAME: str
-        +{static} DEFAULT_DESCRIPTION: str
-        +__init__(participants, name, description, termination_condition, max_turns)
-        +_to_config(): SwarmConfig
-        +_from_config(config): Self
+    class Swarm AGENTCHAT_COLOR {
+        #_handoff_config: Dict[str, List[Handoff]]
+        +__init__(participants, handoff_config, termination_condition, max_turns)
     }
 
-    class MagenticOneGroupChat {
-        +{static} component_config_schema: ClassVar<type>
-        +{static} component_provider_override: ClassVar<str>
-        +{static} DEFAULT_NAME: str
-        +{static} DEFAULT_DESCRIPTION: str
-        +__init__(participants, model_client, name, description, termination_condition, max_turns)
-        +_to_config(): MagenticOneGroupChatConfig
-        +_from_config(config): Self
+    class MagenticOneGroupChat AGENTCHAT_COLOR {
+        #_orchestrator_client: ChatCompletionClient
+        +__init__(participants, orchestrator_client, termination_condition, max_turns)
+    }
+
+    class DiGraph AGENTCHAT_COLOR {
+        #_nodes: Dict[str, DiGraphNode]
+        #_edges: List[DiGraphEdge]
+        +add_node(node: DiGraphNode)
+        +add_edge(edge: DiGraphEdge)
+    }
+
+    class DiGraphNode AGENTCHAT_COLOR {
+        +id: str
+        +agent: ChatAgent
+    }
+
+    class DiGraphEdge AGENTCHAT_COLOR {
+        +source: str
+        +target: str
+        +condition: Callable | None
+    }
+
+    class DiGraphBuilder AGENTCHAT_COLOR {
+        +{static} from_agents(agents: List[ChatAgent]): DiGraph
+    }
+
+    class GraphFlow AGENTCHAT_COLOR {
+        #_graph: DiGraph
+        +__init__(graph: DiGraph, termination_condition, max_turns)
+        +run(task, cancellation_token, output_task_messages): TaskResult
     }
 }
 
-TaskRunner <|.. Team
 Team <|.. BaseGroupChat
+TaskRunner <|.. BaseGroupChat
 
 BaseGroupChat <|-- RoundRobinGroupChat
-Component <|.. RoundRobinGroupChat
-
 BaseGroupChat <|-- SelectorGroupChat
-Component <|.. SelectorGroupChat
-
 BaseGroupChat <|-- Swarm
-Component <|.. Swarm
-
 BaseGroupChat <|-- MagenticOneGroupChat
+Team <|.. GraphFlow
+
+Component <|.. RoundRobinGroupChat
+Component <|.. SelectorGroupChat
+Component <|.. Swarm
 Component <|.. MagenticOneGroupChat
+Component <|.. GraphFlow
+
+BaseGroupChat o-- ChatAgent : manages
+BaseGroupChat o-- TerminationCondition : uses
 
 SelectorGroupChat o-- ChatCompletionClient : uses
 MagenticOneGroupChat o-- ChatCompletionClient : uses
+Swarm o-- Handoff : uses
 
-' ============ SUPPORT CLASSES ============
+GraphFlow *-- DiGraph
+DiGraph *-- DiGraphNode
+DiGraph *-- DiGraphEdge
+DiGraphNode o-- ChatAgent
 
-class Handoff {
-    +target: str
-    +message: str
-    +condition: Callable | None
-    +__init__(target, message, condition)
+' ============================================================================
+' EXTENSION AGENTS
+' ============================================================================
+
+package "autogen_ext.agents" <<Rectangle>> {
+
+    class MultimodalWebSurfer EXTENSIONS_COLOR {
+        #_playwright_controller: PlaywrightController
+        #_model_client: ChatCompletionClient
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class FileSurfer EXTENSIONS_COLOR {
+        #_model_client: ChatCompletionClient
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class VideoSurfer EXTENSIONS_COLOR {
+        #_model_client: ChatCompletionClient
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class OpenAIAgent EXTENSIONS_COLOR {
+        #_openai_client: OpenAI
+        #_assistant_id: str
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class OpenAIAssistantAgent EXTENSIONS_COLOR {
+        #_openai_client: OpenAI
+        #_assistant: Assistant
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class AzureAIAgent EXTENSIONS_COLOR {
+        #_azure_client: AIProjectClient
+        #_agent_id: str
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class MagenticOneCoderAgent EXTENSIONS_COLOR {
+        #_model_client: ChatCompletionClient
+        +on_messages(messages, cancellation_token): Response
+    }
+
+    class PlaywrightController EXTENSIONS_COLOR {
+        #_browser: Browser
+        #_page: Page
+        +navigate(url: str)
+        +click(selector: str)
+        +type_text(selector: str, text: str)
+        +screenshot(): bytes
+    }
 }
 
-class ApprovalRequest {
-    +code: str
-    +context: List<BaseModel>
-    +__init__(code, context)
+BaseChatAgent <|-- MultimodalWebSurfer
+BaseChatAgent <|-- FileSurfer
+BaseChatAgent <|-- VideoSurfer
+BaseChatAgent <|-- OpenAIAgent
+BaseChatAgent <|-- OpenAIAssistantAgent
+BaseChatAgent <|-- AzureAIAgent
+BaseChatAgent <|-- MagenticOneCoderAgent
+
+MultimodalWebSurfer o-- PlaywrightController : uses
+MultimodalWebSurfer o-- ChatCompletionClient : uses
+
+' ============================================================================
+' EXTENSION TEAMS
+' ============================================================================
+
+package "autogen_ext.teams" <<Rectangle>> {
+
+    class MagenticOne EXTENSIONS_COLOR {
+        #_orchestrator: MagenticOneCoderAgent
+        #_web_surfer: MultimodalWebSurfer
+        #_file_surfer: FileSurfer
+        #_coder: MagenticOneCoderAgent
+        +run(task, cancellation_token, output_task_messages): TaskResult
+    }
 }
 
-class ApprovalResponse {
-    +approved: bool
-    +reason: str
-    +__init__(approved, reason)
+Team <|.. MagenticOne
+Component <|.. MagenticOne
+
+' ============================================================================
+' AGENTCHAT STATE CLASSES
+' ============================================================================
+
+package "autogen_agentchat.state" <<Rectangle>> {
+
+    abstract class BaseState AGENTCHAT_COLOR {
+        +version: int
+    }
+
+    class AssistantAgentState AGENTCHAT_COLOR {
+        +message_history: List
+        +tool_state: Dict
+    }
+
+    class BaseGroupChatManagerState AGENTCHAT_COLOR {
+        +message_history: List
+        +turn_count: int
+    }
+
+    class ChatAgentContainerState AGENTCHAT_COLOR {
+        +agent_states: Dict[str, BaseState]
+    }
+
+    class RoundRobinManagerState AGENTCHAT_COLOR {
+        +current_turn: int
+    }
+
+    class SelectorManagerState AGENTCHAT_COLOR {
+        +selection_history: List[str]
+    }
+
+    class SwarmManagerState AGENTCHAT_COLOR {
+        +current_agent: str
+        +handoff_history: List
+    }
+
+    class MagenticOneOrchestratorState AGENTCHAT_COLOR {
+        +task_ledger: List
+        +facts: List
+    }
+
+    class TeamState AGENTCHAT_COLOR {
+        +team_id: str
+        +participant_states: Dict
+    }
+
+    class SocietyOfMindAgentState AGENTCHAT_COLOR {
+        +inner_team_state: TeamState
+    }
 }
 
-class CodeBlock {
-    +language: str
-    +code: str
+BaseState <|-- AssistantAgentState
+BaseState <|-- BaseGroupChatManagerState
+BaseState <|-- ChatAgentContainerState
+BaseState <|-- RoundRobinManagerState
+BaseState <|-- SelectorManagerState
+BaseState <|-- SwarmManagerState
+BaseState <|-- MagenticOneOrchestratorState
+BaseState <|-- TeamState
+BaseState <|-- SocietyOfMindAgentState
+
+BaseGroupChatManagerState <|-- RoundRobinManagerState
+BaseGroupChatManagerState <|-- SelectorManagerState
+BaseGroupChatManagerState <|-- SwarmManagerState
+BaseGroupChatManagerState <|-- MagenticOneOrchestratorState
+
+' ============================================================================
+' UI AND UTILITIES
+' ============================================================================
+
+package "autogen_agentchat.ui" <<Rectangle>> {
+
+    class Console AGENTCHAT_COLOR {
+        +{static} print(message: BaseChatMessage)
+        +{static} print_event(event: BaseAgentEvent)
+    }
+
+    class UserInputManager AGENTCHAT_COLOR {
+        +get_input(prompt: str): str
+    }
 }
 
-class CodeResult {
-    +exit_code: int
-    +output: str
+package "autogen_ext.ui" <<Rectangle>> {
+
+    class RichConsole EXTENSIONS_COLOR {
+        +print(message: BaseChatMessage)
+        +print_event(event: BaseAgentEvent)
+    }
 }
 
-class Image {
-    +data: bytes
-    +mime_type: str
-    +__init__(data, mime_type)
+' ============================================================================
+' LOGGING AND TRACING
+' ============================================================================
+
+package "autogen_core.logging" <<Rectangle>> {
+
+    class LLMCallEvent CORE_COLOR {
+        +prompt_tokens: int
+        +completion_tokens: int
+        +model: str
+    }
+
+    class LLMStreamStartEvent CORE_COLOR {
+        +model: str
+    }
+
+    class LLMStreamEndEvent CORE_COLOR {
+        +prompt_tokens: int
+        +completion_tokens: int
+    }
+
+    class ToolCallEvent CORE_COLOR {
+        +tool_name: str
+        +arguments: Dict
+        +result: Any
+    }
+
+    enum MessageKind CORE_COLOR {
+        SEND
+        PUBLISH
+        RESPONSE
+    }
+
+    enum DeliveryStage CORE_COLOR {
+        SEND
+        DELIVER
+        HANDLE
+    }
+
+    class MessageEvent CORE_COLOR {
+        +kind: MessageKind
+        +stage: DeliveryStage
+        +sender: AgentId
+        +recipient: AgentId
+    }
+
+    class MessageDroppedEvent CORE_COLOR {
+        +message: Any
+        +reason: str
+    }
+
+    class MessageHandlerExceptionEvent CORE_COLOR {
+        +exception: Exception
+        +agent_id: AgentId
+    }
+
+    class AgentConstructionExceptionEvent CORE_COLOR {
+        +exception: Exception
+        +agent_type: str
+    }
 }
 
-' ============ RELATIONSHIPS ============
+' ============================================================================
+' INTERVENTION
+' ============================================================================
 
+package "autogen_core (Intervention)" <<Rectangle>> {
 
-WorkbenchTool <|-- FileReadTool
-WorkbenchTool <|-- FileWriteTool
-WorkbenchTool <|-- FileListTool
-WorkbenchTool <|-- FileDeleteTool
+    class DropMessage CORE_COLOR {
+        +message: str
+    }
 
-BaseTool ..> ToolSchema : creates
-BaseTool ..> FunctionExecutionResult : produces
-BaseTool ..> FunctionCall : receives
+    interface InterventionHandler <<Protocol>> PROTOCOL_COLOR {
+        +{abstract} on_send(message, sender: AgentId, recipient: AgentId)
+        +{abstract} on_publish(message, sender: AgentId, topic_id: TopicId)
+        +{abstract} on_response(message, sender: AgentId, recipient: AgentId)
+    }
 
-ToolSchema o-- ToolParameter : contains
+    class DefaultInterventionHandler CORE_COLOR {
+        +on_send(message, sender: AgentId, recipient: AgentId)
+        +on_publish(message, sender: AgentId, topic_id: TopicId)
+        +on_response(message, sender: AgentId, recipient: AgentId)
+    }
+}
 
-AgentTool o-- ChatAgent : wraps
-AgentTool ..> TaskResult : produces
-
-TeamTool o-- Team : wraps
-TeamTool ..> TeamTaskResult : produces
-
-MCPTool o-- MCPClient : uses
-MCPTool ..> MCPToolDefinition : uses
-MCPTool ..> MCPToolResult : produces
-
-WorkbenchTool o-- BaseWorkbench : uses
-
-WebSearchTool ..> SearchResult : produces
-
-ToolGroup o-- BaseTool : contains
-ConditionalTool o-- BaseTool : delegates to
-SequentialTool o-- BaseTool : orchestrates
-
-ToolRegistry o-- BaseTool : manages
-ToolDecorator ..> FunctionTool : creates
-ToolDecorator ..> AsyncFunctionTool : creates
-
-note right of BaseModel
-    Creates a single response from the model.
-end note
-
-note right of AgentTool
-  **AgentTool** wraps a ChatAgent
-  as a tool, enabling agents to
-  delegate tasks to other agents.
-
-  Key features:
-  - Can pass conversation context
-  - Limits max turns
-  - Formats agent output as tool result
-end note
-
-note right of TeamTool
-  **TeamTool** wraps an entire Team
-  (multi-agent collaboration) as a tool.
-
-  Key features:
-  - Delegates complex tasks to teams
-  - Can return full conversation history
-  - Provides summarized results
-  - Tracks individual participant results
-end note
-
-note bottom of ToolGroup
-  **ToolGroup** bundles related tools
-  for organization and discovery
-end note
-
-note bottom of ConditionalTool
-  **ConditionalTool** selects between
-  two tools based on runtime conditions
-end note
-
-note bottom of SequentialTool
-  **SequentialTool** chains multiple
-  tools together in a pipeline
-end note
+InterventionHandler <|.. DefaultInterventionHandler
 
 @enduml
-
