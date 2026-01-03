@@ -7,14 +7,6 @@ interface TaskRunner <<Protocol>> {
     +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
 }
 
-interface ChatAgent <<Protocol>> {
-    +name: str
-    +description: str
-    +produced_message_types: Sequence<type>
-    +on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-}
-
 interface ComponentBase {
     +component_type: ComponentType
 }
@@ -30,14 +22,147 @@ interface Component<T> {
 abstract class ABC
 
 ' ============ MODEL CLIENT HIERARCHY ============
+rectangle "Chat Completion Client" #FFE4B5 {
+    interface ChatCompletionClient <<Protocol>> {
+        +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator<str | CreateResult>
+        +{abstract} actual_usage(): RequestUsage
+        +{abstract} total_usage(): RequestUsage
+        +{abstract} count_tokens(messages, tools, json_output): int
+        +{abstract} remaining_tokens(messages, tools, json_output): int
+    }
 
-interface ChatCompletionClient <<Protocol>> {
-    +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator<str | CreateResult>
-    +{abstract} actual_usage(): RequestUsage
-    +{abstract} total_usage(): RequestUsage
-    +{abstract} count_tokens(messages, tools, json_output): int
-    +{abstract} remaining_tokens(messages, tools, json_output): int
+    abstract class BaseOpenAIChatCompletionClient {
+        +{static} component_type: ClassVar<ComponentType>
+        #_model: str
+        #_api_key: str | None
+        #_base_url: str | None
+        #_timeout: float | None
+        #_max_retries: int
+        #_model_info: ModelInfo
+        #_client: AsyncOpenAI
+        +__init__(model, api_key, base_url, timeout, max_retries, model_info, ...)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+        +close(): None
+    }
+
+    class OpenAIChatCompletionClient {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        +__init__(model, api_key, organization, base_url, timeout, max_retries, model_info, ...)
+        +_to_config(): OpenAIClientConfigurationConfigModel
+        +_from_config(config): Self
+    }
+
+    class AzureOpenAIChatCompletionClient {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        #_azure_deployment: str
+        #_azure_endpoint: str
+        #_api_version: str
+        #_azure_ad_token_provider: Callable | None
+        +__init__(azure_deployment, model, azure_endpoint, api_version, api_key, azure_ad_token_provider, ...)
+        +_to_config(): AzureOpenAIClientConfigurationConfigModel
+        +_from_config(config): Self
+    }
+
+    abstract class BaseAnthropicChatCompletionClient {
+        +{static} component_type: ClassVar<ComponentType>
+        #_model: str
+        #_api_key: str | None
+        #_base_url: str | None
+        #_timeout: float
+        #_max_tokens: int
+        #_temperature: float
+        #_client: AsyncAnthropic
+        +__init__(model, api_key, base_url, timeout, max_tokens, temperature, ...)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+        +close(): None
+    }
+
+    class AnthropicChatCompletionClient {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        +__init__(model, api_key, max_tokens, temperature, ...)
+        +_to_config(): AnthropicClientConfigurationConfigModel
+        +_from_config(config): Self
+    }
+
+    class AnthropicBedrockChatCompletionClient {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        #_aws_region: str
+        #_aws_access_key_id: str | None
+        #_aws_secret_access_key: str | None
+        +__init__(model, aws_region, aws_access_key_id, aws_secret_access_key, ...)
+        +_to_config(): AnthropicBedrockClientConfigurationConfigModel
+        +_from_config(config): Self
+    }
+
+    abstract class BaseOllamaChatCompletionClient {
+        +{static} component_type: ClassVar<ComponentType>
+        #_model: str
+        #_host: str
+        #_timeout: float | None
+        #_response_format: type | None
+        #_client: AsyncClient
+        +__init__(model, host, timeout, response_format, ...)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+        +close(): None
+    }
+
+    class OllamaChatCompletionClient {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        +__init__(model, host, timeout, response_format, ...)
+        +_to_config(): BaseOllamaClientConfigurationConfigModel
+        +_from_config(config): Self
+    }
+
+    class SKChatCompletionAdapter {
+        +{static} component_type: ClassVar<ComponentType>
+        #_sk_client: ChatCompletionClientBase
+        #_kernel: Kernel | None
+        #_prompt_settings: PromptExecutionSettings | None
+        #_model_info: ModelInfo
+        #_service_id: str | None
+        +__init__(sk_client, kernel, prompt_settings, model_info, service_id)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+    }
+
+    class ChatCompletionCache {
+        +{static} component_type: ClassVar<ComponentType>
+        #_client: ChatCompletionClient
+        #_cache_store: CacheStore
+        +__init__(client, cache_store)
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+        +close(): None
+    }
 }
 
 class RequestUsage {
@@ -54,138 +179,6 @@ class CreateResult {
     +cached: bool
     +logprobs: List | None
     +__init__(content, finish_reason, usage, cached, logprobs)
-}
-
-abstract class BaseOpenAIChatCompletionClient {
-    +{static} component_type: ClassVar<ComponentType>
-    #_model: str
-    #_api_key: str | None
-    #_base_url: str | None
-    #_timeout: float | None
-    #_max_retries: int
-    #_model_info: ModelInfo
-    #_client: AsyncOpenAI
-    +__init__(model, api_key, base_url, timeout, max_retries, model_info, ...)
-    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-    +actual_usage(): RequestUsage
-    +total_usage(): RequestUsage
-    +count_tokens(messages, tools, json_output): int
-    +remaining_tokens(messages, tools, json_output): int
-    +close(): None
-}
-
-class OpenAIChatCompletionClient {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    +__init__(model, api_key, organization, base_url, timeout, max_retries, model_info, ...)
-    +_to_config(): OpenAIClientConfigurationConfigModel
-    +_from_config(config): Self
-}
-
-class AzureOpenAIChatCompletionClient {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    #_azure_deployment: str
-    #_azure_endpoint: str
-    #_api_version: str
-    #_azure_ad_token_provider: Callable | None
-    +__init__(azure_deployment, model, azure_endpoint, api_version, api_key, azure_ad_token_provider, ...)
-    +_to_config(): AzureOpenAIClientConfigurationConfigModel
-    +_from_config(config): Self
-}
-
-abstract class BaseAnthropicChatCompletionClient {
-    +{static} component_type: ClassVar<ComponentType>
-    #_model: str
-    #_api_key: str | None
-    #_base_url: str | None
-    #_timeout: float
-    #_max_tokens: int
-    #_temperature: float
-    #_client: AsyncAnthropic
-    +__init__(model, api_key, base_url, timeout, max_tokens, temperature, ...)
-    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-    +actual_usage(): RequestUsage
-    +total_usage(): RequestUsage
-    +count_tokens(messages, tools, json_output): int
-    +remaining_tokens(messages, tools, json_output): int
-    +close(): None
-}
-
-class AnthropicChatCompletionClient {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    +__init__(model, api_key, max_tokens, temperature, ...)
-    +_to_config(): AnthropicClientConfigurationConfigModel
-    +_from_config(config): Self
-}
-
-class AnthropicBedrockChatCompletionClient {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    #_aws_region: str
-    #_aws_access_key_id: str | None
-    #_aws_secret_access_key: str | None
-    +__init__(model, aws_region, aws_access_key_id, aws_secret_access_key, ...)
-    +_to_config(): AnthropicBedrockClientConfigurationConfigModel
-    +_from_config(config): Self
-}
-
-abstract class BaseOllamaChatCompletionClient {
-    +{static} component_type: ClassVar<ComponentType>
-    #_model: str
-    #_host: str
-    #_timeout: float | None
-    #_response_format: type | None
-    #_client: AsyncClient
-    +__init__(model, host, timeout, response_format, ...)
-    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-    +actual_usage(): RequestUsage
-    +total_usage(): RequestUsage
-    +count_tokens(messages, tools, json_output): int
-    +remaining_tokens(messages, tools, json_output): int
-    +close(): None
-}
-
-class OllamaChatCompletionClient {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    +__init__(model, host, timeout, response_format, ...)
-    +_to_config(): BaseOllamaClientConfigurationConfigModel
-    +_from_config(config): Self
-}
-
-class SKChatCompletionAdapter {
-    +{static} component_type: ClassVar<ComponentType>
-    #_sk_client: ChatCompletionClientBase
-    #_kernel: Kernel | None
-    #_prompt_settings: PromptExecutionSettings | None
-    #_model_info: ModelInfo
-    #_service_id: str | None
-    +__init__(sk_client, kernel, prompt_settings, model_info, service_id)
-    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-    +actual_usage(): RequestUsage
-    +total_usage(): RequestUsage
-    +count_tokens(messages, tools, json_output): int
-    +remaining_tokens(messages, tools, json_output): int
-}
-
-class ChatCompletionCache {
-    +{static} component_type: ClassVar<ComponentType>
-    #_client: ChatCompletionClient
-    #_cache_store: CacheStore
-    +__init__(client, cache_store)
-    +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
-    +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
-    +actual_usage(): RequestUsage
-    +total_usage(): RequestUsage
-    +count_tokens(messages, tools, json_output): int
-    +remaining_tokens(messages, tools, json_output): int
-    +close(): None
 }
 
 ChatCompletionClient <|.. BaseOpenAIChatCompletionClient
@@ -213,95 +206,171 @@ ChatCompletionClient ..> CreateResult : produces
 ChatCompletionClient ..> RequestUsage : produces
 
 ' ============ LLM MESSAGE TYPES ============
+rectangle "Base Model" #LightBlue {
 
-abstract class LLMMessage {
-    +{abstract} content: str | List
-    +role: str
+    abstract class BaseModel {
+        +{abstract} content: str | List
+        +role: str
+    }
+
+    class SystemMessage {
+        +content: str
+        +role: str = "system"
+        +__init__(content: str)
+    }
+
+    class UserMessage {
+        +content: str | List
+        +role: str = "user"
+        +__init__(content: str | List)
+    }
+
+    class AssistantMessage {
+        +content: str | None
+        +function_call: FunctionCall | None
+        +tool_calls: List<FunctionCall> | None
+        +role: str = "assistant"
+        +__init__(content, function_call, tool_calls)
+    }
+
+    class FunctionExecutionResultMessage {
+        +content: str
+        +role: str = "function"
+        +call_id: str
+        +__init__(content: str, call_id: str)
+    }
 }
-
-class SystemMessage {
-    +content: str
-    +role: str = "system"
-    +__init__(content: str)
-}
-
-class UserMessage {
-    +content: str | List
-    +role: str = "user"
-    +__init__(content: str | List)
-}
-
-class AssistantMessage {
-    +content: str | None
-    +function_call: FunctionCall | None
-    +tool_calls: List<FunctionCall> | None
-    +role: str = "assistant"
-    +__init__(content, function_call, tool_calls)
-}
-
-class FunctionExecutionResultMessage {
-    +content: str
-    +role: str = "function"
-    +call_id: str
-    +__init__(content: str, call_id: str)
-}
-
-LLMMessage <|-- SystemMessage
-LLMMessage <|-- UserMessage
-LLMMessage <|-- AssistantMessage
-LLMMessage <|-- FunctionExecutionResultMessage
+BaseModel <|-- SystemMessage
+BaseModel <|-- UserMessage
+BaseModel <|-- AssistantMessage
+BaseModel <|-- FunctionExecutionResultMessage
 
 ' ============ TOOL HIERARCHY ============
+rectangle "base tool" #D8BFD8 {
+    abstract class BaseTool {
+        +{abstract} name: str
+        +{abstract} description: str
+        +{abstract} args_type: type
+        +{abstract} return_type: type
+        +{abstract} run_json(args: str, cancellation_token): str
+        +{abstract} run(args, cancellation_token): Any
+        +{abstract} to_tool_schema(): ToolSchema
+    }
 
-abstract class BaseTool {
-    +{abstract} name: str
-    +{abstract} description: str
-    +{abstract} args_type: type
-    +{abstract} return_type: type
-    +{abstract} run_json(args: str, cancellation_token): str
-    +{abstract} run(args, cancellation_token): Any
-    +{abstract} to_tool_schema(): ToolSchema
-}
+    class FunctionTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_func: Callable
+        +__init__(func: Callable, name: str, description: str)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): Any
+        +to_tool_schema(): ToolSchema
+    }
+    class PythonCodeExecutionTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_func: Callable
+        +__init__(func: Callable, name: str, description: str)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): Any
+        +to_tool_schema(): ToolSchema
+    }
 
-class FunctionTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_func: Callable
-    +__init__(func: Callable, name: str, description: str)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): Any
-    +to_tool_schema(): ToolSchema
-}
+    class AsyncFunctionTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_async_func: Callable
+        #_func_signature: inspect.Signature
+        +__init__(async_func: Callable, name: str, description: str)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): Any
+        +to_tool_schema(): ToolSchema
+    }
+    ' ============ AGENT TOOL ============
 
-class AsyncFunctionTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_async_func: Callable
-    #_func_signature: inspect.Signature
-    +__init__(async_func: Callable, name: str, description: str)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): Any
-    +to_tool_schema(): ToolSchema
-}
-' ============ AGENT TOOL ============
+    class AgentTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_agent: ChatAgent
+        #_can_pass_context: bool
+        #_max_turns: int | None
+        +__init__(agent: ChatAgent, can_pass_context: bool, max_turns: int)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): TaskResult
+        +to_tool_schema(): ToolSchema
+        #_format_result(task_result: TaskResult): str
+    }
 
-class AgentTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_agent: ChatAgent
-    #_can_pass_context: bool
-    #_max_turns: int | None
-    +__init__(agent: ChatAgent, can_pass_context: bool, max_turns: int)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): TaskResult
-    +to_tool_schema(): ToolSchema
-    #_format_result(task_result: TaskResult): str
+    ' ============ TEAM TOOL ============
+
+    class TeamTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_team: Team
+        #_can_pass_context: bool
+        #_max_turns: int | None
+        #_return_full_history: bool
+        +__init__(team: Team, can_pass_context: bool, max_turns: int, return_full_history: bool)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): TeamTaskResult
+        +to_tool_schema(): ToolSchema
+        #_format_result(task_result: TeamTaskResult): str
+        #_summarize_conversation(messages: List): str
+    }
+
+
+    class TeamTaskResult {
+        +messages: Sequence<BaseChatMessage>
+        +stop_reason: str | None
+        +participant_results: Dict<str, TaskResult>
+        +conversation_history: List<BaseChatMessage>
+        +__init__(messages, stop_reason, participant_results, conversation_history)
+    }
+
+    class MCPTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_mcp_client: MCPClient
+        #_tool_name: str
+        +__init__(mcp_client: MCPClient, tool_name: str)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): Any
+        +to_tool_schema(): ToolSchema
+    }
+
+    class WorkbenchTool {
+        +name: str
+        +description: str
+        +args_type: type
+        +return_type: type
+        #_workbench: BaseWorkbench
+        #_operation: str
+        +__init__(workbench: BaseWorkbench, operation: str)
+        +run_json(args: str, cancellation_token): str
+        +run(args, cancellation_token): Any
+        +to_tool_schema(): ToolSchema
+    }
+
+    class DatabaseQueryTool {}
+    class APICallTool {}
+    class WebScrapeTool {}
+    class WebSearchTool {}
+    class FileReadTool {}
+    class FileWriteTool {}
+    class FileListTool {}
+    class FileDeleteTool {}
 }
 
 interface ChatAgent <<Protocol>> {
@@ -314,66 +383,6 @@ class TaskResult {
     +messages: Sequence<BaseChatMessage>
     +stop_reason: str | None
     +__init__(messages, stop_reason)
-}
-
-' ============ TEAM TOOL ============
-
-class TeamTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_team: Team
-    #_can_pass_context: bool
-    #_max_turns: int | None
-    #_return_full_history: bool
-    +__init__(team: Team, can_pass_context: bool, max_turns: int, return_full_history: bool)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): TeamTaskResult
-    +to_tool_schema(): ToolSchema
-    #_format_result(task_result: TeamTaskResult): str
-    #_summarize_conversation(messages: List): str
-}
-
-interface Team <<Protocol>> {
-    +name: str
-    +description: str
-    +run(task: str, cancellation_token): TaskResult
-    +run_stream(task: str, cancellation_token): AsyncGenerator
-}
-
-class TeamTaskResult {
-    +messages: Sequence<BaseChatMessage>
-    +stop_reason: str | None
-    +participant_results: Dict<str, TaskResult>
-    +conversation_history: List<BaseChatMessage>
-    +__init__(messages, stop_reason, participant_results, conversation_history)
-}
-
-class MCPTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_mcp_client: MCPClient
-    #_tool_name: str
-    +__init__(mcp_client: MCPClient, tool_name: str)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): Any
-    +to_tool_schema(): ToolSchema
-}
-
-class WorkbenchTool {
-    +name: str
-    +description: str
-    +args_type: type
-    +return_type: type
-    #_workbench: BaseWorkbench
-    #_operation: str
-    +__init__(workbench: BaseWorkbench, operation: str)
-    +run_json(args: str, cancellation_token): str
-    +run(args, cancellation_token): Any
-    +to_tool_schema(): ToolSchema
 }
 
 class ToolSchema {
@@ -396,15 +405,6 @@ class FunctionExecutionResult {
     +__init__(content: str, call_id: str)
 }
 
-BaseTool <|-- FunctionTool
-BaseTool <|-- AsyncFunctionTool
-BaseTool <|-- AgentTool
-BaseTool <|-- TeamTool
-BaseTool <|-- MCPTool
-BaseTool <|-- MCPTool
-BaseTool <|-- WorkbenchTool
-BaseTool ..> ToolSchema : creates
-BaseTool ..> FunctionExecutionResult : produces
 
 ' ============ MCP (Model Context Protocol) COMPONENTS ============
 
@@ -482,64 +482,66 @@ MCPClient ..> MCPResourceContent : produces
 MCPTool o-- MCPClient : uses
 
 ' ============ CODE EXECUTOR HIERARCHY ============
+rectangle "code executor base" #90EE90 {
 
-interface CodeExecutor <<Protocol>> {
-    +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
-    +{abstract} restart(): None
-    +{abstract} stop(): None
+    interface CodeExecutor <<Protocol>> {
+        +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
+        +{abstract} restart(): None
+        +{abstract} stop(): None
+    }
+
+    class LocalCommandLineCodeExecutor {
+        #_work_dir: str
+        #_timeout: int
+        #_virtual_env: str | None
+        +__init__(work_dir, timeout, virtual_env)
+        +execute_code_blocks(code_blocks, cancellation_token): CodeResult
+        +restart(): None
+        +stop(): None
+    }
+
+    class DockerCommandLineCodeExecutor {
+        #_image: str
+        #_container_name: str
+        #_timeout: int
+        #_work_dir: str
+        #_auto_remove: bool
+        +__init__(image, container_name, timeout, work_dir, auto_remove)
+        +execute_code_blocks(code_blocks, cancellation_token): CodeResult
+        +restart(): None
+        +stop(): None
+    }
 }
-
-class LocalCommandLineCodeExecutor {
-    #_work_dir: str
-    #_timeout: int
-    #_virtual_env: str | None
-    +__init__(work_dir, timeout, virtual_env)
-    +execute_code_blocks(code_blocks, cancellation_token): CodeResult
-    +restart(): None
-    +stop(): None
-}
-
-class DockerCommandLineCodeExecutor {
-    #_image: str
-    #_container_name: str
-    #_timeout: int
-    #_work_dir: str
-    #_auto_remove: bool
-    +__init__(image, container_name, timeout, work_dir, auto_remove)
-    +execute_code_blocks(code_blocks, cancellation_token): CodeResult
-    +restart(): None
-    +stop(): None
-}
-
 CodeExecutor <|.. LocalCommandLineCodeExecutor
 CodeExecutor <|.. DockerCommandLineCodeExecutor
 
 ' ============ MEMORY HIERARCHY ============
+rectangle "memory base" #ADD8E6 {
+    abstract class Memory {
+        +{abstract} add(message: BaseChatMessage): None
+        +{abstract} get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
+        +{abstract} clear(): None
+    }
 
-abstract class Memory {
-    +{abstract} add(message: BaseChatMessage): None
-    +{abstract} get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
-    +{abstract} clear(): None
-}
+    class ChatHistoryMemory {
+        #_max_messages: int | None
+        #_messages: List<BaseChatMessage>
+        +__init__(max_messages: int | None)
+        +add(message: BaseChatMessage): None
+        +get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
+        +clear(): None
+    }
 
-class ChatHistoryMemory {
-    #_max_messages: int | None
-    #_messages: List<BaseChatMessage>
-    +__init__(max_messages: int | None)
-    +add(message: BaseChatMessage): None
-    +get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
-    +clear(): None
-}
-
-class SummaryMemory {
-    #_model_client: ChatCompletionClient
-    #_summary_prompt: str
-    #_summary: str | None
-    #_max_messages: int
-    +__init__(model_client, summary_prompt, max_messages)
-    +add(message: BaseChatMessage): None
-    +get_context(recent_messages: List<BaseChatMessage>): List<LLMMessage>
-    +clear(): None
+    class SummaryMemory {
+        #_model_client: ChatCompletionClient
+        #_summary_prompt: str
+        #_summary: str | None
+        #_max_messages: int
+        +__init__(model_client, summary_prompt, max_messages)
+        +add(message: BaseChatMessage): None
+        +get_context(recent_messages: List<BaseChatMessage>): List<BaseModel>
+        +clear(): None
+    }
 }
 
 Memory <|-- ChatHistoryMemory
@@ -549,203 +551,190 @@ SummaryMemory o-- ChatCompletionClient : uses
 ' ============ CHAT COMPLETION CONTEXT ============
 
 class ChatCompletionContext {
-    #_messages: List<LLMMessage>
+    #_messages: List<BaseModel>
     #_max_messages: int | None
-    +__init__(messages: List<LLMMessage>, max_messages: int | None)
+    +__init__(messages: List<BaseModel>, max_messages: int | None)
     +add_message(message: LLMMessage): None
-    +get_messages(): List<LLMMessage>
+    +get_messages(): List<BaseModel>
     +clear(): None
     +truncate(max_messages: int): None
 }
 
-' ============ WORKBENCH ============
-
-class Workbench {
-    +root_dir: str
-    +working_dir: str
-    +__init__(root_dir: str)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-}
 ' ============ WORKBENCH HIERARCHY ============
+rectangle "base workbench" #F0E68C {
+    abstract class BaseWorkbench {
+        +{abstract} root_dir: str
+        +{abstract} working_dir: str
+        +{abstract} create_file(path: str, content: str): str
+        +{abstract} read_file(path: str): str
+        +{abstract} write_file(path: str, content: str): str
+        +{abstract} delete_file(path: str): None
+        +{abstract} list_files(pattern: str): List<str>
+        +{abstract} get_absolute_path(path: str): str
+        +{abstract} exists(path: str): bool
+        +{abstract} mkdir(path: str, parents: bool): str
+        +{abstract} move_file(src: str, dst: str): str
+        +{abstract} copy_file(src: str, dst: str): str
+        +{abstract} get_file_info(path: str): FileInfo
+        +{abstract} save_state(): WorkbenchState
+        +{abstract} load_state(state: WorkbenchState): None
+    }
 
-abstract class BaseWorkbench {
-    +{abstract} root_dir: str
-    +{abstract} working_dir: str
-    +{abstract} create_file(path: str, content: str): str
-    +{abstract} read_file(path: str): str
-    +{abstract} write_file(path: str, content: str): str
-    +{abstract} delete_file(path: str): None
-    +{abstract} list_files(pattern: str): List<str>
-    +{abstract} get_absolute_path(path: str): str
-    +{abstract} exists(path: str): bool
-    +{abstract} mkdir(path: str, parents: bool): str
-    +{abstract} move_file(src: str, dst: str): str
-    +{abstract} copy_file(src: str, dst: str): str
-    +{abstract} get_file_info(path: str): FileInfo
-    +{abstract} save_state(): WorkbenchState
-    +{abstract} load_state(state: WorkbenchState): None
+    class Workbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_security_manager: SecurityManager
+        +__init__(root_dir: str, security_manager: SecurityManager)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
+
+    class MCPWorkbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_mcp_client: MCPClient
+        #_resource_prefix: str
+        +__init__(mcp_client: MCPClient, resource_prefix: str)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
+
+    class GitWorkbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_base_workbench: BaseWorkbench
+        #_repo: git.Repo
+        #_auto_commit: bool
+        +__init__(base_workbench: BaseWorkbench, auto_commit: bool)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +commit(message: str): str
+        +create_branch(branch_name: str): None
+        +checkout(branch_name: str): None
+        +diff(commit1: str, commit2: str): str
+        +rollback(commit_hash: str): None
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
+
+    class SandboxWorkbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_base_workbench: BaseWorkbench
+        #_allowed_paths: List<str>
+        #_blocked_paths: List<str>
+        #_read_only_paths: List<str>
+        #_max_file_size: int
+        +__init__(base_workbench: BaseWorkbench, allowed_paths, blocked_paths, read_only_paths, max_file_size)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +_validate_path(path: str): bool
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
+
+    class EnvironmentWorkbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_base_workbench: BaseWorkbench
+        #_env_vars: Dict<str, str>
+        #_config_files: Dict<str, str>
+        #_secrets_manager: SecretsManager
+        +__init__(base_workbench: BaseWorkbench, secrets_manager: SecretsManager)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +set_env_var(key: str, value: str): None
+        +get_env_var(key: str): str
+        +load_config(path: str): Dict
+        +save_config(path: str, config: Dict): None
+        +get_secret(key: str): str
+        +set_secret(key: str, value: str): None
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
+
+    class BuildWorkbench {
+        +{static} component_type: ClassVar<ComponentType>
+        +root_dir: str
+        +working_dir: str
+        #_base_workbench: BaseWorkbench
+        #_build_system: str
+        #_build_config: Dict
+        +__init__(base_workbench: BaseWorkbench, build_system: str)
+        +create_file(path: str, content: str): str
+        +read_file(path: str): str
+        +write_file(path: str, content: str): str
+        +delete_file(path: str): None
+        +list_files(pattern: str): List<str>
+        +get_absolute_path(path: str): str
+        +exists(path: str): bool
+        +mkdir(path: str, parents: bool): str
+        +move_file(src: str, dst: str): str
+        +copy_file(src: str, dst: str): str
+        +get_file_info(path: str): FileInfo
+        +build(target: str): BuildResult
+        +test(test_pattern: str): TestResult
+        +install_dependencies(): None
+        +run_linter(): LintResult
+        +format_code(): None
+        +save_state(): WorkbenchState
+        +load_state(state: WorkbenchState): None
+    }
 }
-
-class Workbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_security_manager: SecurityManager
-    +__init__(root_dir: str, security_manager: SecurityManager)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
-class MCPWorkbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_mcp_client: MCPClient
-    #_resource_prefix: str
-    +__init__(mcp_client: MCPClient, resource_prefix: str)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
-class GitWorkbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_base_workbench: BaseWorkbench
-    #_repo: git.Repo
-    #_auto_commit: bool
-    +__init__(base_workbench: BaseWorkbench, auto_commit: bool)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +commit(message: str): str
-    +create_branch(branch_name: str): None
-    +checkout(branch_name: str): None
-    +diff(commit1: str, commit2: str): str
-    +rollback(commit_hash: str): None
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
-class SandboxWorkbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_base_workbench: BaseWorkbench
-    #_allowed_paths: List<str>
-    #_blocked_paths: List<str>
-    #_read_only_paths: List<str>
-    #_max_file_size: int
-    +__init__(base_workbench: BaseWorkbench, allowed_paths, blocked_paths, read_only_paths, max_file_size)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +_validate_path(path: str): bool
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
-class EnvironmentWorkbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_base_workbench: BaseWorkbench
-    #_env_vars: Dict<str, str>
-    #_config_files: Dict<str, str>
-    #_secrets_manager: SecretsManager
-    +__init__(base_workbench: BaseWorkbench, secrets_manager: SecretsManager)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +set_env_var(key: str, value: str): None
-    +get_env_var(key: str): str
-    +load_config(path: str): Dict
-    +save_config(path: str, config: Dict): None
-    +get_secret(key: str): str
-    +set_secret(key: str, value: str): None
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
-class BuildWorkbench {
-    +{static} component_type: ClassVar<ComponentType>
-    +root_dir: str
-    +working_dir: str
-    #_base_workbench: BaseWorkbench
-    #_build_system: str
-    #_build_config: Dict
-    +__init__(base_workbench: BaseWorkbench, build_system: str)
-    +create_file(path: str, content: str): str
-    +read_file(path: str): str
-    +write_file(path: str, content: str): str
-    +delete_file(path: str): None
-    +list_files(pattern: str): List<str>
-    +get_absolute_path(path: str): str
-    +exists(path: str): bool
-    +mkdir(path: str, parents: bool): str
-    +move_file(src: str, dst: str): str
-    +copy_file(src: str, dst: str): str
-    +get_file_info(path: str): FileInfo
-    +build(target: str): BuildResult
-    +test(test_pattern: str): TestResult
-    +install_dependencies(): None
-    +run_linter(): LintResult
-    +format_code(): None
-    +save_state(): WorkbenchState
-    +load_state(state: WorkbenchState): None
-}
-
 class FileInfo {
     +path: str
     +size: int
@@ -845,221 +834,254 @@ BuildWorkbench ..> LintResult : produces
 
 WorkbenchTool o-- BaseWorkbench : uses
 
-' ============ BASE AGENT CLASS ============
+' ============ MESSAGE HIERARCHY ============
+rectangle "Base Model" #LightGreen {
 
-abstract class BaseChatAgent {
-    +{static} component_type: ClassVar<ComponentType>
-    #_name: str
-    #_description: str
-    +__init__(name: str, description: str)
-    +name: str
-    +description: str
-    +{abstract} produced_message_types: Sequence<type>
-    +{abstract} on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-    +{abstract} on_reset(cancellation_token): None
-    +on_pause(cancellation_token): None
-    +on_resume(cancellation_token): None
-    +save_state(): Mapping
-    +load_state(state): None
-    +close(): None
-    +run(task, cancellation_token, output_task_messages): TaskResult
-    +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+    abstract class BaseMessage {
+        +source: str
+        +models_usage: RequestUsage | None
+        +metadata: Dict
+        +type: str
+        +{abstract} to_text(): str
+        +{abstract} to_model_text(): str
+        +{abstract} to_model_message(): LLMMessage
+    }
+
+    abstract class BaseChatMessage {
+        +source: str
+        +models_usage: RequestUsage | None
+        +metadata: Dict
+        +type: str
+        +{abstract} to_text(): str
+        +{abstract} to_model_text(): str
+        +{abstract} to_model_message(): LLMMessage
+    }
+
+    class BaseTextChatMessage extends BaseChatMessage, ABC {
+        +content: str
+        +to_text(): str
+        +to_model_text(): str
+        +to_model_message(): UserMessage
+    }
+
+    BaseMessage <|-- BaseChatMessage
+    BaseChatMessage <|-- BaseTextChatMessage
+
+    class TextMessage {
+        +content: str
+        +__init__(content: str, source: str, models_usage: RequestUsage)
+    }
+
+    class MultiModalMessage {
+        +content: List<str | Image>
+        +__init__(content: List, source: str, models_usage: RequestUsage)
+        +to_text(): str
+        +to_model_text(): str
+        +to_model_message(): UserMessage
+    }
+
+    class StopMessage {
+        +content: str
+        +__init__(content: str, source: str)
+    }
+
+    class HandoffMessage {
+        +content: str
+        +target: str
+        +context: List<BaseModel>
+        +__init__(content: str, target: str, source: str, context: List)
+    }
+
+    class ToolCallSummaryMessage {
+        +content: str
+        +call_id: str
+        +__init__(content: str, call_id: str, source: str)
+    }
+
+    class StructuredMessage<T> {
+        +content: T
+        +format_string: str | None
+        +__init__(content: T, source: str, format_string: str)
+        +to_text(): str
+    }
+
+    abstract class BaseAgentEvent {
+        +source: str
+        +metadata: Dict
+        +type: str
+    }
+
+    class ToolCallRequestEvent {
+        +content: str
+        +__init__(content: str, source: str)
+    }
+
+    class ToolCallExecutionEvent {
+        +content: List<FunctionExecutionResult>
+        +__init__(content: List, source: str)
+    }
+
+    class MemoryQueryEvent {
+        +query: str
+        +__init__(query: str, source: str)
+    }
+
+    class UserInputRequestedEvent {
+        +prompt: str
+        +__init__(prompt: str, source: str)
+    }
+
+    class ModelClientStreamingChunkEvent {
+        +content: str
+        +__init__(content: str, source: str)
+    }
+
+    class ThoughtEvent {
+        +thought: str
+        +__init__(thought: str, source: str)
+    }
+
+    class SelectSpeakerEvent {
+        +speaker: str
+        +__init__(speaker: str, source: str)
+    }
+
+    class CodeGenerationEvent {
+        +code: str
+        +__init__(code: str, source: str)
+    }
+
+    class CodeExecutionEvent {
+        +result: str
+        +__init__(result: str, source: str)
+    }
 }
 
+BaseMessage <|-- BaseAgentEvent
+BaseTextChatMessage <|-- HandoffMessage
+BaseTextChatMessage <|-- StopMessage
+BaseTextChatMessage <|-- TextMessage
+BaseTextChatMessage <|-- ToolCallSummaryMessage
+BaseChatMessage <|-- StructuredMessage
+BaseChatMessage <|-- MultiModalMessage
+BaseAgentEvent <|-- ToolCallRequestEvent
+BaseAgentEvent <|-- ToolCallExecutionEvent
+BaseAgentEvent <|-- MemoryQueryEvent
+BaseAgentEvent <|-- UserInputRequestedEvent
+BaseAgentEvent <|-- ModelClientStreamingChunkEvent
+BaseAgentEvent <|-- ThoughtEvent
+BaseAgentEvent <|-- SelectSpeakerEvent
+BaseAgentEvent <|-- CodeGenerationEvent
+BaseAgentEvent <|-- CodeExecutionEvent
+
+' ============ CONCRETE AGENT IMPLEMENTATIONS ============
+
+' ============ BASE AGENT CLASS ============
+
+rectangle "base chat agent" #FFA07A {
+    abstract class BaseChatAgent {
+        +{static} component_type: ClassVar<ComponentType>
+        #_name: str
+        #_description: str
+        +__init__(name: str, description: str)
+        +name: str
+        +description: str
+        +{abstract} produced_message_types: Sequence<type>
+        +{abstract} on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +{abstract} on_reset(cancellation_token): None
+        +on_pause(cancellation_token): None
+        +on_resume(cancellation_token): None
+        +save_state(): Mapping
+        +load_state(state): None
+        +close(): None
+        +run(task, cancellation_token, output_task_messages): TaskResult
+        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+    }
+
+    class AssistantAgent {
+        +{static} component_version: ClassVar<int>
+        +{static} component_provider_override: ClassVar<str>
+        #_model_client: ChatCompletionClient
+        #_tools: List<BaseTool>
+        #_workbench: Workbench | None
+        #_handoffs: List<Handoff>
+        #_model_context: ChatCompletionContext
+        #_system_message: str
+        #_reflect_on_tool_use: bool
+        #_max_tool_iterations: int
+        #_tool_call_summary_formatter: Callable
+        #_output_content_type: type<BaseModel> | None
+        #_memory: Sequence<Memory>
+        +__init__(name, model_client, tools, workbench, handoffs, ...)
+        +produced_message_types: Sequence<type>
+        +model_context: ChatCompletionContext
+        +on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +on_reset(cancellation_token): None
+        +save_state(): Mapping
+        +load_state(state): None
+    }
+
+    class CodeExecutorAgent {
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_TERMINAL_DESCRIPTION: str
+        +{static} DEFAULT_AGENT_DESCRIPTION: str
+        +{static} DEFAULT_SYSTEM_MESSAGE: str
+        +{static} NO_CODE_BLOCKS_FOUND_MESSAGE: str
+        +{static} DEFAULT_SUPPORTED_LANGUAGES: List<str>
+        #_code_executor: CodeExecutor
+        #_model_client: ChatCompletionClient | None
+        #_model_context: ChatCompletionContext | None
+        #_max_retries_on_error: int
+        #_sources: Sequence<str>
+        #_supported_languages: List<str>
+        #_approval_func: Callable
+        +__init__(name, code_executor, model_client, ...)
+        +produced_message_types: Sequence<type>
+        +model_context: ChatCompletionContext
+        +on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +extract_code_blocks_from_messages(messages): List<CodeBlock>
+        +execute_code_block(code_blocks, cancellation_token): CodeResult
+        +on_reset(cancellation_token): None
+    }
+
+    class UserProxyAgent {
+        +{static} component_type: ClassVar<ComponentType>
+        +{static} component_provider_override: ClassVar<str>
+        #_input_func: InputFuncType
+        +__init__(name, description, input_func)
+        +produced_message_types: Sequence<type>
+        +on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +on_reset(cancellation_token): None
+    }
+
+    class SocietyOfMindAgent {
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_INSTRUCTION: str
+        +{static} DEFAULT_RESPONSE_PROMPT: str
+        +{static} DEFAULT_DESCRIPTION: str
+        #_team: Team
+        #_model_client: ChatCompletionClient
+        #_instruction: str
+        #_response_prompt: str
+        #_model_context: ChatCompletionContext
+        +__init__(name, team, model_client, ...)
+        +produced_message_types: Sequence<type>
+        +model_context: ChatCompletionContext
+        +on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +on_reset(cancellation_token): None
+        +save_state(): Mapping
+        +load_state(state): None
+    }
+}
 TaskRunner <|.. BaseChatAgent
 ChatAgent <|.. BaseChatAgent
 ABC <|-- BaseChatAgent
 ComponentBase <|.. BaseChatAgent
-
-' ============ MESSAGE HIERARCHY ============
-
-abstract class BaseChatMessage {
-    +source: str
-    +models_usage: RequestUsage | None
-    +metadata: Dict
-    +type: str
-    +{abstract} to_text(): str
-    +{abstract} to_model_text(): str
-    +{abstract} to_model_message(): LLMMessage
-}
-
-abstract class BaseTextMessage {
-    +content: str
-    +to_text(): str
-    +to_model_text(): str
-    +to_model_message(): UserMessage
-}
-
-class TextMessage {
-    +content: str
-    +__init__(content: str, source: str, models_usage: RequestUsage)
-}
-
-class MultiModalMessage {
-    +content: List<str | Image>
-    +__init__(content: List, source: str, models_usage: RequestUsage)
-    +to_text(): str
-    +to_model_text(): str
-    +to_model_message(): UserMessage
-}
-
-class StopMessage {
-    +content: str
-    +__init__(content: str, source: str)
-}
-
-class HandoffMessage {
-    +content: str
-    +target: str
-    +context: List<LLMMessage>
-    +__init__(content: str, target: str, source: str, context: List)
-}
-
-class ResetMessage {
-    +content: str
-    +__init__(content: str, source: str)
-}
-
-class ToolCallMessage {
-    +content: List<FunctionCall>
-    +__init__(content: List, source: str, models_usage: RequestUsage)
-}
-
-class ToolCallResultMessage {
-    +content: List<FunctionExecutionResult>
-    +__init__(content: List, source: str)
-}
-
-class ToolCallSummaryMessage {
-    +content: str
-    +call_id: str
-    +__init__(content: str, call_id: str, source: str)
-}
-
-class StructuredMessage<T> {
-    +content: T
-    +format_string: str | None
-    +__init__(content: T, source: str, format_string: str)
-    +to_text(): str
-}
-
-abstract class BaseAgentEvent {
-    +source: str
-    +metadata: Dict
-    +type: str
-}
-
-class UserInputRequestedEvent {
-    +prompt: str
-    +__init__(prompt: str, source: str)
-}
-
-class ModelClientStreamingChunkEvent {
-    +content: str
-    +__init__(content: str, source: str)
-}
-
-class ToolCallExecutionEvent {
-    +content: List<FunctionExecutionResult>
-    +__init__(content: List, source: str)
-}
-
-BaseChatMessage <|-- BaseTextMessage
-BaseTextMessage <|-- TextMessage
-BaseChatMessage <|-- MultiModalMessage
-BaseTextMessage <|-- StopMessage
-BaseChatMessage <|-- HandoffMessage
-BaseTextMessage <|-- ResetMessage
-BaseChatMessage <|-- ToolCallMessage
-BaseChatMessage <|-- ToolCallResultMessage
-BaseChatMessage <|-- ToolCallSummaryMessage
-BaseChatMessage <|-- StructuredMessage
-
-BaseAgentEvent <|-- UserInputRequestedEvent
-BaseAgentEvent <|-- ModelClientStreamingChunkEvent
-BaseAgentEvent <|-- ToolCallExecutionEvent
-
-' ============ CONCRETE AGENT IMPLEMENTATIONS ============
-
-class AssistantAgent {
-    +{static} component_version: ClassVar<int>
-    +{static} component_provider_override: ClassVar<str>
-    #_model_client: ChatCompletionClient
-    #_tools: List<BaseTool>
-    #_workbench: Workbench | None
-    #_handoffs: List<Handoff>
-    #_model_context: ChatCompletionContext
-    #_system_message: str
-    #_reflect_on_tool_use: bool
-    #_max_tool_iterations: int
-    #_tool_call_summary_formatter: Callable
-    #_output_content_type: type<BaseModel> | None
-    #_memory: Sequence<Memory>
-    +__init__(name, model_client, tools, workbench, handoffs, ...)
-    +produced_message_types: Sequence<type>
-    +model_context: ChatCompletionContext
-    +on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-    +on_reset(cancellation_token): None
-    +save_state(): Mapping
-    +load_state(state): None
-}
-
-class CodeExecutorAgent {
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_TERMINAL_DESCRIPTION: str
-    +{static} DEFAULT_AGENT_DESCRIPTION: str
-    +{static} DEFAULT_SYSTEM_MESSAGE: str
-    +{static} NO_CODE_BLOCKS_FOUND_MESSAGE: str
-    +{static} DEFAULT_SUPPORTED_LANGUAGES: List<str>
-    #_code_executor: CodeExecutor
-    #_model_client: ChatCompletionClient | None
-    #_model_context: ChatCompletionContext | None
-    #_max_retries_on_error: int
-    #_sources: Sequence<str>
-    #_supported_languages: List<str>
-    #_approval_func: Callable
-    +__init__(name, code_executor, model_client, ...)
-    +produced_message_types: Sequence<type>
-    +model_context: ChatCompletionContext
-    +on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-    +extract_code_blocks_from_messages(messages): List<CodeBlock>
-    +execute_code_block(code_blocks, cancellation_token): CodeResult
-    +on_reset(cancellation_token): None
-}
-
-class UserProxyAgent {
-    +{static} component_type: ClassVar<ComponentType>
-    +{static} component_provider_override: ClassVar<str>
-    #_input_func: InputFuncType
-    +__init__(name, description, input_func)
-    +produced_message_types: Sequence<type>
-    +on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-    +on_reset(cancellation_token): None
-}
-
-class SocietyOfMindAgent {
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_INSTRUCTION: str
-    +{static} DEFAULT_RESPONSE_PROMPT: str
-    +{static} DEFAULT_DESCRIPTION: str
-    #_team: Team
-    #_model_client: ChatCompletionClient
-    #_instruction: str
-    #_response_prompt: str
-    #_model_context: ChatCompletionContext
-    +__init__(name, team, model_client, ...)
-    +produced_message_types: Sequence<type>
-    +model_context: ChatCompletionContext
-    +on_messages(messages, cancellation_token): Response
-    +on_messages_stream(messages, cancellation_token): AsyncGenerator
-    +on_reset(cancellation_token): None
-    +save_state(): Mapping
-    +load_state(state): None
-}
 
 BaseChatAgent <|-- AssistantAgent
 Component <|.. AssistantAgent
@@ -1102,107 +1124,108 @@ class TaskResult {
 }
 
 ' ============ TERMINATION CONDITIONS ============
+rectangle "termination condition base" #FFB6C1 {
+    abstract class TerminationCondition {
+        +{static} component_type: ClassVar<ComponentType>
+        +{abstract} terminated: bool
+        +{abstract} __call__(messages): StopMessage | None
+        +{abstract} reset(): None
+        +__or__(other): OrTerminationCondition
+        +__and__(other): AndTerminationCondition
+    }
 
-abstract class TerminationCondition {
-    +{static} component_type: ClassVar<ComponentType>
-    +{abstract} terminated: bool
-    +{abstract} __call__(messages): StopMessage | None
-    +{abstract} reset(): None
-    +__or__(other): OrTerminationCondition
-    +__and__(other): AndTerminationCondition
-}
+    class MaxMessageTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_max_messages: int
+        #_message_count: int
+        #_terminated: bool
+        +__init__(max_messages: int)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class MaxMessageTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_max_messages: int
-    #_message_count: int
-    #_terminated: bool
-    +__init__(max_messages: int)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class TextMentionTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_text: str
+        #_sources: List<str> | None
+        #_terminated: bool
+        +__init__(text: str, sources: List)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class TextMentionTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_text: str
-    #_sources: List<str> | None
-    #_terminated: bool
-    +__init__(text: str, sources: List)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class HandoffTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_target: str
+        #_terminated: bool
+        +__init__(target: str)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class HandoffTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_target: str
-    #_terminated: bool
-    +__init__(target: str)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class TokenUsageTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_max_prompt_tokens: int | None
+        #_max_completion_tokens: int | None
+        #_prompt_token_count: int
+        #_completion_token_count: int
+        #_terminated: bool
+        +__init__(max_prompt_tokens, max_completion_tokens)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class TokenUsageTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_max_prompt_tokens: int | None
-    #_max_completion_tokens: int | None
-    #_prompt_token_count: int
-    #_completion_token_count: int
-    #_terminated: bool
-    +__init__(max_prompt_tokens, max_completion_tokens)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class ExternalTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_terminated: bool
+        +__init__()
+        +terminated: bool
+        +set(): None
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class ExternalTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_terminated: bool
-    +__init__()
-    +terminated: bool
-    +set(): None
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class TextMessageTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_sources: List<str> | None
+        #_terminated: bool
+        +__init__(sources: List)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class TextMessageTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_sources: List<str> | None
-    #_terminated: bool
-    +__init__(sources: List)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class FunctionCallTermination {
+        +{static} component_provider_override: ClassVar<str>
+        #_function_name: str
+        #_terminated: bool
+        +__init__(function_name: str)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class FunctionCallTermination {
-    +{static} component_provider_override: ClassVar<str>
-    #_function_name: str
-    #_terminated: bool
-    +__init__(function_name: str)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
+    class OrTerminationCondition {
+        +{static} component_provider_override: ClassVar<str>
+        #_conditions: Tuple<TerminationCondition>
+        +__init__(*conditions)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 
-class OrTerminationCondition {
-    +{static} component_provider_override: ClassVar<str>
-    #_conditions: Tuple<TerminationCondition>
-    +__init__(*conditions)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
-}
-
-class AndTerminationCondition {
-    +{static} component_provider_override: ClassVar<str>
-    #_conditions: Tuple<TerminationCondition>
-    +__init__(*conditions)
-    +terminated: bool
-    +__call__(messages): StopMessage | None
-    +reset(): None
+    class AndTerminationCondition {
+        +{static} component_provider_override: ClassVar<str>
+        #_conditions: Tuple<TerminationCondition>
+        +__init__(*conditions)
+        +terminated: bool
+        +__call__(messages): StopMessage | None
+        +reset(): None
+    }
 }
 
 ComponentBase <|.. TerminationCondition
@@ -1220,85 +1243,88 @@ TerminationCondition <|-- AndTerminationCondition
 
 ' ============ TEAM HIERARCHY ============
 
-interface Team <<Protocol>> {
-    +name: str
-    +description: str
-    +run(task, cancellation_token, output_task_messages): TaskResult
-    +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
-    +reset(): None
-    +pause(): None
-    +resume(): None
-    +save_state(): Mapping
-    +load_state(state): None
-    +close(): None
-}
+rectangle "group chat" #D1F7F3 {
 
-abstract class BaseGroupChat {
-    #_name: str
-    #_description: str
-    #_participants: List<ChatAgent | Team>
-    #_participant_names: List<str>
-    #_termination_condition: TerminationCondition | None
-    #_max_turns: int | None
-    +__init__(participants, name, description, termination_condition, max_turns)
-    +name: str
-    +description: str
-    +run(task, cancellation_token, output_task_messages): TaskResult
-    +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
-    +reset(): None
-    +pause(): None
-    +resume(): None
-    +save_state(): Mapping
-    +load_state(state): None
-    +close(): None
-}
+    interface Team <<Protocol>> {
+        +name: str
+        +description: str
+        +run(task, cancellation_token, output_task_messages): TaskResult
+        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+        +reset(): None
+        +pause(): None
+        +resume(): None
+        +save_state(): Mapping
+        +load_state(state): None
+        +close(): None
+    }
 
-class RoundRobinGroupChat {
-    +{static} component_config_schema: ClassVar<type>
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_NAME: str
-    +{static} DEFAULT_DESCRIPTION: str
-    #_next_speaker_index: int
-    +__init__(participants, name, description, termination_condition, max_turns, custom_message_types)
-    +_select_speaker(history): str
-    +_to_config(): RoundRobinGroupChatConfig
-    +_from_config(config): Self
-}
+    abstract class BaseGroupChat {
+        #_name: str
+        #_description: str
+        #_participants: List<ChatAgent | Team>
+        #_participant_names: List<str>
+        #_termination_condition: TerminationCondition | None
+        #_max_turns: int | None
+        +__init__(participants, name, description, termination_condition, max_turns)
+        +name: str
+        +description: str
+        +run(task, cancellation_token, output_task_messages): TaskResult
+        +run_stream(task, cancellation_token, output_task_messages): AsyncGenerator
+        +reset(): None
+        +pause(): None
+        +resume(): None
+        +save_state(): Mapping
+        +load_state(state): None
+        +close(): None
+    }
 
-class SelectorGroupChat {
-    +{static} component_config_schema: ClassVar<type>
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_NAME: str
-    +{static} DEFAULT_DESCRIPTION: str
-    +{static} DEFAULT_SELECTOR_PROMPT: str
-    #_model_client: ChatCompletionClient
-    #_selector_prompt: str
-    #_allow_repeated_speaker: bool
-    #_selector_func: Callable | None
-    +__init__(participants, model_client, name, description, ...)
-    +_select_speaker(history): str
-    +_to_config(): SelectorGroupChatConfig
-    +_from_config(config): Self
-}
+    class RoundRobinGroupChat {
+        +{static} component_config_schema: ClassVar<type>
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_NAME: str
+        +{static} DEFAULT_DESCRIPTION: str
+        #_next_speaker_index: int
+        +__init__(participants, name, description, termination_condition, max_turns, custom_message_types)
+        +_select_speaker(history): str
+        +_to_config(): RoundRobinGroupChatConfig
+        +_from_config(config): Self
+    }
 
-class Swarm {
-    +{static} component_config_schema: ClassVar<type>
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_NAME: str
-    +{static} DEFAULT_DESCRIPTION: str
-    +__init__(participants, name, description, termination_condition, max_turns)
-    +_to_config(): SwarmConfig
-    +_from_config(config): Self
-}
+    class SelectorGroupChat {
+        +{static} component_config_schema: ClassVar<type>
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_NAME: str
+        +{static} DEFAULT_DESCRIPTION: str
+        +{static} DEFAULT_SELECTOR_PROMPT: str
+        #_model_client: ChatCompletionClient
+        #_selector_prompt: str
+        #_allow_repeated_speaker: bool
+        #_selector_func: Callable | None
+        +__init__(participants, model_client, name, description, ...)
+        +_select_speaker(history): str
+        +_to_config(): SelectorGroupChatConfig
+        +_from_config(config): Self
+    }
 
-class MagenticOneGroupChat {
-    +{static} component_config_schema: ClassVar<type>
-    +{static} component_provider_override: ClassVar<str>
-    +{static} DEFAULT_NAME: str
-    +{static} DEFAULT_DESCRIPTION: str
-    +__init__(participants, model_client, name, description, termination_condition, max_turns)
-    +_to_config(): MagenticOneGroupChatConfig
-    +_from_config(config): Self
+    class Swarm {
+        +{static} component_config_schema: ClassVar<type>
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_NAME: str
+        +{static} DEFAULT_DESCRIPTION: str
+        +__init__(participants, name, description, termination_condition, max_turns)
+        +_to_config(): SwarmConfig
+        +_from_config(config): Self
+    }
+
+    class MagenticOneGroupChat {
+        +{static} component_config_schema: ClassVar<type>
+        +{static} component_provider_override: ClassVar<str>
+        +{static} DEFAULT_NAME: str
+        +{static} DEFAULT_DESCRIPTION: str
+        +__init__(participants, model_client, name, description, termination_condition, max_turns)
+        +_to_config(): MagenticOneGroupChatConfig
+        +_from_config(config): Self
+    }
 }
 
 TaskRunner <|.. Team
@@ -1330,7 +1356,7 @@ class Handoff {
 
 class ApprovalRequest {
     +code: str
-    +context: List<LLMMessage>
+    +context: List<BaseModel>
     +__init__(code, context)
 }
 
@@ -1358,27 +1384,25 @@ class Image {
 
 ' ============ RELATIONSHIPS ============
 
+BaseTool <|-- PythonCodeExecutionTool
+BaseTool <|-- WebScrapeTool
+BaseTool <|-- APICallTool
+BaseTool <|-- DatabaseQueryTool
+BaseTool <|-- ConditionalTool
+BaseTool <|-- SequentialTool
 BaseTool <|-- FunctionTool
 BaseTool <|-- AsyncFunctionTool
 BaseTool <|-- AgentTool
 BaseTool <|-- TeamTool
 BaseTool <|-- MCPTool
 BaseTool <|-- WorkbenchTool
-BaseTool <|-- CodeExecutionTool
-BaseTool <|-- WebSearchTool
-BaseTool <|-- WebScrapeTool
-BaseTool <|-- APICallTool
-BaseTool <|-- DatabaseQueryTool
-BaseTool <|-- ConditionalTool
-BaseTool <|-- SequentialTool
+BaseTool ..> ToolSchema : creates
+BaseTool ..> FunctionExecutionResult : produces
 
 WorkbenchTool <|-- FileReadTool
 WorkbenchTool <|-- FileWriteTool
 WorkbenchTool <|-- FileListTool
 WorkbenchTool <|-- FileDeleteTool
-
-CodeExecutionTool <|-- PythonCodeExecutionTool
-CodeExecutionTool <|-- BashCodeExecutionTool
 
 BaseTool ..> ToolSchema : creates
 BaseTool ..> FunctionExecutionResult : produces
@@ -1398,9 +1422,6 @@ MCPTool ..> MCPToolResult : produces
 
 WorkbenchTool o-- BaseWorkbench : uses
 
-CodeExecutionTool o-- CodeExecutor : uses
-CodeExecutionTool ..> CodeResult : produces
-
 WebSearchTool ..> SearchResult : produces
 
 ToolGroup o-- BaseTool : contains
@@ -1410,6 +1431,10 @@ SequentialTool o-- BaseTool : orchestrates
 ToolRegistry o-- BaseTool : manages
 ToolDecorator ..> FunctionTool : creates
 ToolDecorator ..> AsyncFunctionTool : creates
+
+note right of BaseModel
+    Creates a single response from the model.
+end note
 
 note right of AgentTool
   **AgentTool** wraps a ChatAgent
@@ -1449,3 +1474,4 @@ note bottom of SequentialTool
 end note
 
 @enduml
+
