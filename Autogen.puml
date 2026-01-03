@@ -192,7 +192,7 @@ class ParametersSchema {
 BaseTool ..> ToolSchema : creates
 
 ' ============ WORKBENCH HIERARCHY ============
-rectangle "Workbench" #F0E68C {
+rectangle "Workbench Layout" #F0E68C {
     abstract class Workbench {
         +{abstract} list_tools(): List[ToolSchema]
         +{abstract} call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
