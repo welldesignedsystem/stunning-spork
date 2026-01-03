@@ -288,8 +288,6 @@ rectangle "base tool" #D8BFD8 {
     BaseTool <|-- BaseToolWithState
     BaseTool <|-- AgentTool
     BaseTool <|-- MCPTool
-    BaseTool ..> ToolSchema : creates
-    BaseTool ..> FunctionExecutionResult : produces
 }
 
     class TeamTaskResult {
