@@ -318,7 +318,7 @@ class CodeResult {
 CodeExecutor ..> CodeResult : produces
 
 ' ============ MEMORY HIERARCHY ============
-rectangle "Memory" #ADD8E6 {
+rectangle "Memory module" #ADD8E6 {
     abstract class Memory {
         +{abstract} query(query: str): MemoryQueryResult
         +{abstract} add(content: MemoryContent): None
@@ -347,7 +347,7 @@ class UpdateContextResult {
 }
 
 ' ============ MODEL CONTEXT ============
-rectangle "Model Context" #E6E6FA {
+rectangle "Model Context layout" #E6E6FA {
     abstract class ChatCompletionContext {
         +{abstract} add_message(message: LLMMessage): None
         +{abstract} get_messages(): List[LLMMessage]
