@@ -161,20 +161,28 @@ rectangle "Tools" #D8BFD8 {
         +{abstract} run(args: ArgsType, cancellation_token): ReturnType
         +{abstract} schema: ToolSchema
     }
-
+    class PythonCodeExecutionTool{
+    }
+    class GlobalSearchTool{
+    }
+    class LocalSearchTool{
+    }
     class FunctionTool {
     }
-
     class BaseToolWithState {
     }
-
     class BaseStreamTool {
     }
+    class LangChainToolAdapter {
+    }
 }
-
+BaseTool <|-- PythonCodeExecutionTool
 BaseTool <|-- FunctionTool
 BaseTool <|-- BaseStreamTool
 BaseTool <|-- BaseToolWithState
+BaseTool <|-- LocalSearchTool
+BaseTool <|-- GlobalSearchTool
+BaseTool <|-- LangChainToolAdapter
 
 class ToolSchema {
     +name: str
