@@ -54,3 +54,5 @@ Icon?
 plantuml-cache/
 
 .idea/
+notes/faiss_index
+
