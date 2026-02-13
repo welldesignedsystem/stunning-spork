@@ -1,0 +1,792 @@
+@startuml Agent_grouped
+
+' ============ BASE INTERFACES AND PROTOCOLS ============
+
+interface TaskRunner <<Protocol>> {
+    +run(task, cancellation_token): TaskResult
+    +run_stream(task, cancellation_token): AsyncGenerator
+}
+
+interface ComponentBase {
+    +component_type: ComponentType
+}
+
+interface Component<T> {
+    +component_version: int
+    +component_config_schema: type
+    +component_provider_override: str
+    +_to_config(): T
+    +_from_config(config: T): Self
+}
+
+' ============ MODEL CLIENT HIERARCHY ============
+rectangle "Chat Completion Clients" #FFE4B5 {
+    interface ChatCompletionClient <<Protocol>> {
+        +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +{abstract} actual_usage(): RequestUsage
+        +{abstract} total_usage(): RequestUsage
+        +{abstract} count_tokens(messages, tools, json_output): int
+        +{abstract} remaining_tokens(messages, tools, json_output): int
+        +{abstract} model_info: ModelInfo
+    }
+
+    abstract class BaseOpenAIChatCompletionClient {
+        #_model: str
+        #_api_key: str | None
+        #_client: AsyncOpenAI
+        #_model_info: ModelInfo
+        +create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
+        +create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
+        +actual_usage(): RequestUsage
+        +total_usage(): RequestUsage
+        +count_tokens(messages, tools, json_output): int
+        +remaining_tokens(messages, tools, json_output): int
+    }
+
+    class OpenAIChatCompletionClient {
+    }
+
+    class AzureOpenAIChatCompletionClient {
+    }
+
+    abstract class BaseAnthropicChatCompletionClient {
+    }
+
+    class AnthropicChatCompletionClient {
+    }
+
+    class AnthropicBedrockChatCompletionClient {
+    }
+
+    class OllamaChatCompletionClient {
+    }
+
+    class SKChatCompletionAdapter {
+        #_sk_client: ChatCompletionClientBase
+        #_kernel: Kernel | None
+        #_model_info: ModelInfo
+    }
+
+    class ChatCompletionCache {
+        #_client: ChatCompletionClient
+        #_cache_store: CacheStore
+    }
+
+    class ReplayChatCompletionClient {
+    }
+}
+
+ChatCompletionClient <|.. BaseOpenAIChatCompletionClient
+BaseOpenAIChatCompletionClient <|-- OpenAIChatCompletionClient
+BaseOpenAIChatCompletionClient <|-- AzureOpenAIChatCompletionClient
+Component <|.. OpenAIChatCompletionClient
+Component <|.. AzureOpenAIChatCompletionClient
+
+ChatCompletionClient <|.. BaseAnthropicChatCompletionClient
+BaseAnthropicChatCompletionClient <|-- AnthropicChatCompletionClient
+BaseAnthropicChatCompletionClient <|-- AnthropicBedrockChatCompletionClient
+Component <|.. AnthropicChatCompletionClient
+
+ChatCompletionClient <|.. OllamaChatCompletionClient
+Component <|.. OllamaChatCompletionClient
+
+ChatCompletionClient <|.. SKChatCompletionAdapter
+ChatCompletionClient <|.. ChatCompletionCache
+ChatCompletionClient <|.. ReplayChatCompletionClient
+
+ChatCompletionCache o-- ChatCompletionClient : wraps
+
+class RequestUsage {
+    +prompt_tokens: int
+    +completion_tokens: int
+    +total_tokens: int
+}
+
+class CreateResult {
+    +content: str | List[FunctionCall]
+    +finish_reason: str
+    +usage: RequestUsage
+    +cached: bool
+    +logprobs: List | None
+}
+
+ChatCompletionClient ..> CreateResult : produces
+ChatCompletionClient ..> RequestUsage : uses
+
+' ============ LLM MESSAGE TYPES ============
+rectangle "LLM Messages" #LightBlue {
+    class SystemMessage {
+        +content: str
+        +role: str = "system"
+    }
+
+    class UserMessage {
+        +content: str | List
+        +role: str = "user"
+    }
+
+    class AssistantMessage {
+        +content: str | List[FunctionCall]
+        +role: str = "assistant"
+        +thought: str | None
+    }
+
+    class FunctionExecutionResultMessage {
+        +content: List[FunctionExecutionResult]
+        +role: str = "tool"
+    }
+}
+
+class FunctionCall {
+    +id: str
+    +name: str
+    +arguments: str
+}
+
+class FunctionExecutionResult {
+    +content: str
+    +call_id: str
+    +is_error: bool
+}
+
+' ============ TOOL HIERARCHY ============
+rectangle "Tools" #D8BFD8 {
+    abstract class BaseTool<ArgsType, ReturnType> {
+        +{abstract} name: str
+        +{abstract} description: str
+        +{abstract} args_type: type[ArgsType]
+        +{abstract} return_type: type[ReturnType]
+        +{abstract} run_json(args: str, cancellation_token): str
+        +{abstract} run(args: ArgsType, cancellation_token): ReturnType
+        +{abstract} schema: ToolSchema
+    }
+    class PythonCodeExecutionTool{
+    }
+    class GlobalSearchTool{
+    }
+    class LocalSearchTool{
+    }
+    class FunctionTool {
+    }
+    class BaseToolWithState {
+    }
+    class BaseStreamTool {
+    }
+    class LangChainToolAdapter {
+    }
+}
+BaseTool <|-- PythonCodeExecutionTool
+BaseTool <|-- FunctionTool
+BaseTool <|-- BaseStreamTool
+BaseTool <|-- BaseToolWithState
+BaseTool <|-- LocalSearchTool
+BaseTool <|-- GlobalSearchTool
+BaseTool <|-- LangChainToolAdapter
+
+class ToolSchema {
+    +name: str
+    +description: str
+    +parameters: ParametersSchema
+    +strict: bool
+}
+
+class ParametersSchema {
+    +type: str
+    +properties: Dict
+    +required: List[str]
+}
+
+BaseTool ..> ToolSchema : creates
+
+' ============ WORKBENCH HIERARCHY ============
+rectangle "Workbench Layout" #F0E68C {
+    abstract class Workbench {
+        +{abstract} list_tools(): List[ToolSchema]
+        +{abstract} call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+        +{abstract} start(): None
+        +{abstract} stop(): None
+        +{abstract} reset(): None
+        +{abstract} save_state(): Mapping
+        +{abstract} load_state(state): None
+    }
+
+    abstract class StreamWorkbench {
+        +{abstract} call_tool_stream(name, arguments, cancellation_token, call_id): AsyncGenerator
+    }
+
+    class StaticWorkbench {
+        #_tools: List[BaseTool]
+        #_tool_overrides: Dict[str, ToolOverride]
+    }
+
+    class StaticStreamWorkbench {
+    }
+}
+
+Workbench <|-- StaticWorkbench
+Component <|.. StaticWorkbench
+StreamWorkbench <|-- StaticStreamWorkbench
+StaticWorkbench <|-- StaticStreamWorkbench
+
+StaticWorkbench o-- BaseTool : contains
+
+class ToolResult {
+    +content: List[TextResultContent | ImageResultContent]
+    +is_error: bool
+    +name: str
+}
+
+class TextResultContent {
+    +content: str
+}
+
+class ImageResultContent {
+    +content: Image
+}
+
+Workbench ..> ToolResult : produces
+
+' ============ MCP TOOLS (Extension) ============
+rectangle "MCP Tools Extension" #FFB1C1 {
+    class McpWorkbench {
+        +server_params: StdioServerParams | SseServerParams
+        +list_tools(): List[ToolSchema]
+        +call_tool(name, arguments, cancellation_token, call_id): ToolResult
+        +start(): None
+        +stop(): None
+    }
+
+    class StdioServerParams {
+        +command: str
+        +args: List[str]
+        +read_timeout_seconds: int
+    }
+
+    class SseServerParams {
+        +url: str
+    }
+
+    class StreamableHttpServerParams {
+        +url: str
+    }
+}
+
+Workbench <|.. McpWorkbench
+McpWorkbench o-- StdioServerParams : uses
+McpWorkbench o-- SseServerParams : uses
+
+' ============ CODE EXECUTOR HIERARCHY ============
+rectangle "Code Executors" #90EE90 {
+    interface CodeExecutor <<Protocol>> {
+        +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
+        +{abstract} restart(): None
+        +{abstract} stop(): None
+    }
+
+    class LocalCommandLineCodeExecutor {
+        +work_dir: str
+    }
+
+    class DockerCommandLineCodeExecutor {
+        +work_dir: str
+        +image: str
+        +container_name: str
+        +device_requests: List[DeviceRequest]
+    }
+
+    class DockerJupyterCodeExecutor {
+        +work_dir: str
+        +jupyter_server: DockerJupyterServer
+    }
+
+    class JupyterCodeExecutor {
+    }
+
+    class ACADynamicSessionsCodeExecutor {
+    }
+}
+
+CodeExecutor <|.. LocalCommandLineCodeExecutor
+CodeExecutor <|.. DockerCommandLineCodeExecutor
+CodeExecutor <|.. DockerJupyterCodeExecutor
+CodeExecutor <|.. JupyterCodeExecutor
+CodeExecutor <|.. ACADynamicSessionsCodeExecutor
+
+class CodeBlock {
+    +language: str
+    +code: str
+}
+
+class CodeResult {
+    +exit_code: int
+    +output: str
+}
+
+CodeExecutor ..> CodeResult : produces
+
+' ============ MEMORY HIERARCHY ============
+rectangle "Memory module" #ADD8E6 {
+    abstract class Memory {
+        +{abstract} query(query: str): MemoryQueryResult
+        +{abstract} add(content: MemoryContent): None
+        +{abstract} clear(): None
+        +{abstract} update_context(messages: List[LLMMessage]): UpdateContextResult
+    }
+
+    class ListMemory {
+        #_memory: List[MemoryContent]
+    }
+}
+
+Memory <|-- ListMemory
+
+class MemoryContent {
+    +content: str
+    +mime_type: str
+}
+
+class MemoryQueryResult {
+    +results: List[MemoryContent]
+}
+
+class UpdateContextResult {
+    +system_message: SystemMessage | None
+}
+
+' ============ MODEL CONTEXT ============
+rectangle "Model Context layout" #E6E6FA {
+    abstract class ChatCompletionContext {
+        +{abstract} add_message(message: LLMMessage): None
+        +{abstract} get_messages(): List[LLMMessage]
+        +{abstract} clear(): None
+        +{abstract} save_state(): ChatCompletionContextState
+        +{abstract} load_state(state: ChatCompletionContextState): None
+    }
+
+    class UnboundedChatCompletionContext {
+        #_messages: List[LLMMessage]
+    }
+
+    class BufferedChatCompletionContext {
+        #_messages: List[LLMMessage]
+        #_buffer_size: int
+    }
+
+    class TokenLimitedChatCompletionContext {
+        #_messages: List[LLMMessage]
+        #_token_limit: int
+        #_model_client: ChatCompletionClient
+    }
+
+    class HeadAndTailChatCompletionContext {
+        #_head_size: int
+        #_tail_size: int
+    }
+}
+
+ChatCompletionContext <|-- UnboundedChatCompletionContext
+ChatCompletionContext <|-- BufferedChatCompletionContext
+ChatCompletionContext <|-- TokenLimitedChatCompletionContext
+ChatCompletionContext <|-- HeadAndTailChatCompletionContext
+
+TokenLimitedChatCompletionContext o-- ChatCompletionClient : uses
+
+' ============ MESSAGE HIERARCHY (AgentChat) ============
+rectangle "AgentChat Messages" #LightGreen {
+    abstract class BaseMessage {
+        +source: str
+        +models_usage: RequestUsage | None
+        +metadata: Dict
+        +type: str
+    }
+
+    abstract class BaseChatMessage {
+        +{abstract} to_model_message(): LLMMessage
+    }
+
+    class TextMessage {
+        +content: str
+    }
+
+    class MultiModalMessage {
+        +content: List[str | Image]
+    }
+
+    class StopMessage {
+        +content: str
+    }
+
+    class HandoffMessage {
+        +target: str
+        +content: str
+        +context: List[BaseChatMessage]
+    }
+
+    class ToolCallSummaryMessage {
+        +content: str
+    }
+
+    class StructuredMessage<T> {
+        +content: T
+        +structured_output: T
+    }
+
+    abstract class BaseAgentEvent {
+    }
+
+    class ToolCallRequestEvent {
+        +content: List[FunctionCall]
+    }
+
+    class ToolCallExecutionEvent {
+        +content: List[FunctionExecutionResult]
+    }
+
+    class MemoryQueryEvent {
+    }
+
+    class UserInputRequestedEvent {
+    }
+
+    class ModelClientStreamingChunkEvent {
+        +content: str
+    }
+
+    class ThoughtEvent {
+        +content: str
+    }
+
+    class SelectSpeakerEvent {
+        +selected_speaker: str
+    }
+
+    class CodeGenerationEvent {
+        +code: str
+    }
+
+    class CodeExecutionEvent {
+        +result: CodeResult
+    }
+}
+
+BaseMessage <|-- BaseChatMessage
+BaseMessage <|-- BaseAgentEvent
+BaseChatMessage <|-- TextMessage
+BaseChatMessage <|-- MultiModalMessage
+BaseChatMessage <|-- StopMessage
+BaseChatMessage <|-- HandoffMessage
+BaseChatMessage <|-- ToolCallSummaryMessage
+BaseChatMessage <|-- StructuredMessage
+BaseAgentEvent <|-- ToolCallRequestEvent
+BaseAgentEvent <|-- ToolCallExecutionEvent
+BaseAgentEvent <|-- MemoryQueryEvent
+BaseAgentEvent <|-- UserInputRequestedEvent
+BaseAgentEvent <|-- ModelClientStreamingChunkEvent
+BaseAgentEvent <|-- ThoughtEvent
+BaseAgentEvent <|-- SelectSpeakerEvent
+BaseAgentEvent <|-- CodeGenerationEvent
+BaseAgentEvent <|-- CodeExecutionEvent
+
+' ============ BASE AGENT CLASS ============
+rectangle "Agents" #FFA07A {
+    interface ChatAgent <<Protocol>> {
+        +name: str
+        +description: str
+        +produced_message_types: Sequence[type]
+    }
+
+    abstract class BaseChatAgent {
+        #_name: str
+        #_description: str
+        +{abstract} produced_message_types: Sequence[type]
+        +{abstract} on_messages(messages, cancellation_token): Response
+        +on_messages_stream(messages, cancellation_token): AsyncGenerator
+        +{abstract} on_reset(cancellation_token): None
+        +run(task, cancellation_token): TaskResult
+        +run_stream(task, cancellation_token): AsyncGenerator
+        +save_state(): Mapping
+        +load_state(state): None
+    }
+
+    class AssistantAgent {
+        #_model_client: ChatCompletionClient
+        #_tools: List[BaseTool] | None
+        #_workbench: Workbench | List[Workbench] | None
+        #_handoffs: List[Handoff]
+        #_model_context: ChatCompletionContext
+        #_system_message: str | None
+        #_memory: List[Memory]
+        #_reflect_on_tool_use: bool
+        #_max_tool_iterations: int
+    }
+
+    class CodeExecutorAgent {
+        #_code_executor: CodeExecutor
+        #_model_client: ChatCompletionClient | None
+        #_model_context: ChatCompletionContext | None
+        #_approval_func: Callable | None
+    }
+
+    class UserProxyAgent {
+    }
+
+    class SocietyOfMindAgent {
+        #_model_client: ChatCompletionClient
+        #_model_context: ChatCompletionContext
+        #_team: Team
+    }
+
+    class MessageFilterAgent {
+        #_filters: List[PerSourceFilter]
+    }
+}
+
+TaskRunner <|.. BaseChatAgent
+ChatAgent <|.. BaseChatAgent
+ComponentBase <|.. BaseChatAgent
+
+BaseChatAgent <|-- AssistantAgent
+Component <|.. AssistantAgent
+
+BaseChatAgent <|-- CodeExecutorAgent
+Component <|.. CodeExecutorAgent
+
+BaseChatAgent <|-- UserProxyAgent
+Component <|.. UserProxyAgent
+
+BaseChatAgent <|-- SocietyOfMindAgent
+Component <|.. SocietyOfMindAgent
+
+BaseChatAgent <|-- MessageFilterAgent
+Component <|.. MessageFilterAgent
+
+' Agent compositions
+AssistantAgent o-- ChatCompletionClient : uses
+AssistantAgent o-- BaseTool : may use
+AssistantAgent o-- Workbench : may use
+AssistantAgent o-- ChatCompletionContext : uses
+AssistantAgent o-- Memory : may use
+AssistantAgent o-- Handoff : may have
+
+CodeExecutorAgent o-- CodeExecutor : uses
+CodeExecutorAgent o-- ChatCompletionClient : may use
+CodeExecutorAgent o-- ChatCompletionContext : may use
+
+SocietyOfMindAgent o-- ChatCompletionClient : uses
+SocietyOfMindAgent o-- ChatCompletionContext : uses
+
+' ============ RESPONSE AND RESULT TYPES ============
+class Response {
+    +chat_message: BaseChatMessage
+    +inner_messages: List[BaseAgentEvent | BaseChatMessage] | None
+}
+
+class TaskResult {
+    +messages: Sequence[BaseChatMessage]
+    +stop_reason: str | None
+}
+
+' ============ TERMINATION CONDITIONS ============
+rectangle "Termination Conditions" #FFB6C1 {
+    abstract class TerminationCondition {
+        +{abstract} terminated: bool
+        +{abstract} __call__(messages): StopMessage | None
+        +{abstract} reset(): None
+    }
+
+    class MaxMessageTermination {
+        +max_messages: int
+    }
+
+    class TextMentionTermination {
+        +text: str
+    }
+
+    class HandoffTermination {
+    }
+
+    class TokenUsageTermination {
+        +max_tokens: int
+    }
+
+    class ExternalTermination {
+    }
+
+    class TextMessageTermination {
+        +source: str
+    }
+
+    class FunctionCallTermination {
+        +function_name: str
+    }
+
+    class SourceMatchTermination {
+        +source: str
+    }
+
+    class StopMessageTermination {
+    }
+
+    class TimeoutTermination {
+        +timeout_seconds: float
+    }
+
+    class FunctionalTermination {
+        +func: Callable
+    }
+
+    class OrTerminationCondition {
+        +conditions: List[TerminationCondition]
+    }
+
+    class AndTerminationCondition {
+        +conditions: List[TerminationCondition]
+    }
+}
+
+ComponentBase <|.. TerminationCondition
+Component <|.. TerminationCondition
+
+TerminationCondition <|-- MaxMessageTermination
+TerminationCondition <|-- TextMentionTermination
+TerminationCondition <|-- HandoffTermination
+TerminationCondition <|-- TokenUsageTermination
+TerminationCondition <|-- ExternalTermination
+TerminationCondition <|-- TextMessageTermination
+TerminationCondition <|-- FunctionCallTermination
+TerminationCondition <|-- SourceMatchTermination
+TerminationCondition <|-- StopMessageTermination
+TerminationCondition <|-- TimeoutTermination
+TerminationCondition <|-- FunctionalTermination
+TerminationCondition <|-- OrTerminationCondition
+TerminationCondition <|-- AndTerminationCondition
+
+OrTerminationCondition o-- TerminationCondition : contains
+AndTerminationCondition o-- TerminationCondition : contains
+
+' ============ TEAM HIERARCHY ============
+rectangle "Teams" #D1F7F3 {
+    interface Team <<Protocol>> {
+        +name: str
+        +description: str
+        +run(task, cancellation_token): TaskResult
+        +run_stream(task, cancellation_token): AsyncGenerator
+        +reset(): None
+    }
+
+    abstract class BaseGroupChat {
+        #_name: str
+        #_description: str
+        #_participants: List[ChatAgent]
+        #_termination_condition: TerminationCondition | None
+        #_max_turns: int | None
+    }
+
+    class RoundRobinGroupChat {
+    }
+
+    class SelectorGroupChat {
+    }
+
+    class Swarm {
+    }
+
+    class MagenticOneGroupChat {
+    }
+}
+
+TaskRunner <|.. Team
+Team <|.. BaseGroupChat
+
+BaseGroupChat <|-- RoundRobinGroupChat
+Component <|.. RoundRobinGroupChat
+
+BaseGroupChat <|-- SelectorGroupChat
+Component <|.. SelectorGroupChat
+
+BaseGroupChat <|-- Swarm
+Component <|.. Swarm
+
+BaseGroupChat <|-- MagenticOneGroupChat
+Component <|.. MagenticOneGroupChat
+
+SelectorGroupChat o-- ChatCompletionClient : uses
+MagenticOneGroupChat o-- ChatCompletionClient : uses
+BaseGroupChat o-- ChatAgent : contains
+BaseGroupChat o-- TerminationCondition : may use
+
+class Handoff {
+    +target: str
+    +message: str
+    +condition: Callable | None
+}
+
+class ApprovalRequest {
+    +code: str
+    +context: List[LLMMessage]
+}
+
+class ApprovalResponse {
+    +approved: bool
+    +reason: str
+}
+
+note right of AssistantAgent
+  **AssistantAgent** is the main agent
+  for tool use and model interactions.
+
+  Key features:
+  - Can use tools or workbenches
+  - Supports handoffs to other agents
+  - Memory integration
+  - Streaming support
+  - Structured output
+end note
+
+note right of Workbench
+  **Workbench** provides a collection
+  of tools that share state and resources.
+
+  Different from individual Tools:
+  - StaticWorkbench: static tool set
+  - McpWorkbench: MCP server integration
+end note
+
+note right of McpWorkbench
+  **McpWorkbench** integrates with
+  Model Context Protocol (MCP) servers
+
+  Supports multiple server types:
+  - Stdio: Local process communication
+  - SSE: Server-Sent Events
+  - HTTP: Web-based servers
+end note
+
+note right of McpWorkbench
+  **McpWorkbench** integrates with
+  Model Context Protocol (MCP) servers
+
+  Supports multiple server types:
+  - Stdio: Local process communication
+  - SSE: Server-Sent Events
+  - HTTP: Web-based servers
+end note
+
+' ============ UI COMPONENTS ============
+class Console {
+    +{static} run_stream_for_agent(agent, task, cancellation_token): TaskResult
+    +{static} run_stream_for_team(team, task, cancellation_token): TaskResult
+    +{static} print(message): None
+    +{static} print_message(message, depth): None
+    +{static} print_event(event, depth): None
+}
+
+Console ..> BaseChatAgent : displays
+Console ..> Team : displays
+Console ..> BaseChatMessage : renders
+Console ..> BaseAgentEvent : renders
+
+@enduml
+
+@enduml

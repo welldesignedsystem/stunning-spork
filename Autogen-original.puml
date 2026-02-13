@@ -1,4 +1,4 @@
-@startuml Agent_Framework
+@startuml Agent_original
 
 ' ============ BASE INTERFACES AND PROTOCOLS ============
 
@@ -20,7 +20,7 @@ interface Component<T> {
 }
 
 ' ============ MODEL CLIENT HIERARCHY ============
-rectangle "Chat Completion Clients" #FFE4B5 {
+
     interface ChatCompletionClient <<Protocol>> {
         +{abstract} create(messages, tools, json_output, extra_create_args, cancellation_token): CreateResult
         +{abstract} create_stream(messages, tools, json_output, extra_create_args, cancellation_token): AsyncGenerator
@@ -75,7 +75,6 @@ rectangle "Chat Completion Clients" #FFE4B5 {
 
     class ReplayChatCompletionClient {
     }
-}
 
 ChatCompletionClient <|.. BaseOpenAIChatCompletionClient
 BaseOpenAIChatCompletionClient <|-- OpenAIChatCompletionClient
@@ -114,29 +113,28 @@ class CreateResult {
 ChatCompletionClient ..> CreateResult : produces
 ChatCompletionClient ..> RequestUsage : uses
 
-' ============ LLM MESSAGE TYPES ============
-rectangle "LLM Messages" #LightBlue {
-    class SystemMessage {
-        +content: str
-        +role: str = "system"
-    }
 
-    class UserMessage {
-        +content: str | List
-        +role: str = "user"
-    }
-
-    class AssistantMessage {
-        +content: str | List[FunctionCall]
-        +role: str = "assistant"
-        +thought: str | None
-    }
-
-    class FunctionExecutionResultMessage {
-        +content: List[FunctionExecutionResult]
-        +role: str = "tool"
-    }
+class SystemMessage {
+    +content: str
+    +role: str = "system"
 }
+
+class UserMessage {
+    +content: str | List
+    +role: str = "user"
+}
+
+class AssistantMessage {
+    +content: str | List[FunctionCall]
+    +role: str = "assistant"
+    +thought: str | None
+}
+
+class FunctionExecutionResultMessage {
+    +content: List[FunctionExecutionResult]
+    +role: str = "tool"
+}
+
 
 class FunctionCall {
     +id: str
@@ -150,32 +148,31 @@ class FunctionExecutionResult {
     +is_error: bool
 }
 
-' ============ TOOL HIERARCHY ============
-rectangle "Tools" #D8BFD8 {
-    abstract class BaseTool<ArgsType, ReturnType> {
-        +{abstract} name: str
-        +{abstract} description: str
-        +{abstract} args_type: type[ArgsType]
-        +{abstract} return_type: type[ReturnType]
-        +{abstract} run_json(args: str, cancellation_token): str
-        +{abstract} run(args: ArgsType, cancellation_token): ReturnType
-        +{abstract} schema: ToolSchema
-    }
-    class PythonCodeExecutionTool{
-    }
-    class GlobalSearchTool{
-    }
-    class LocalSearchTool{
-    }
-    class FunctionTool {
-    }
-    class BaseToolWithState {
-    }
-    class BaseStreamTool {
-    }
-    class LangChainToolAdapter {
-    }
+
+abstract class BaseTool<ArgsType, ReturnType> {
+    +{abstract} name: str
+    +{abstract} description: str
+    +{abstract} args_type: type[ArgsType]
+    +{abstract} return_type: type[ReturnType]
+    +{abstract} run_json(args: str, cancellation_token): str
+    +{abstract} run(args: ArgsType, cancellation_token): ReturnType
+    +{abstract} schema: ToolSchema
 }
+class PythonCodeExecutionTool{
+}
+class GlobalSearchTool{
+}
+class LocalSearchTool{
+}
+class FunctionTool {
+}
+class BaseToolWithState {
+}
+class BaseStreamTool {
+}
+class LangChainToolAdapter {
+}
+
 BaseTool <|-- PythonCodeExecutionTool
 BaseTool <|-- FunctionTool
 BaseTool <|-- BaseStreamTool
@@ -199,30 +196,29 @@ class ParametersSchema {
 
 BaseTool ..> ToolSchema : creates
 
-' ============ WORKBENCH HIERARCHY ============
-rectangle "Workbench Layout" #F0E68C {
-    abstract class Workbench {
-        +{abstract} list_tools(): List[ToolSchema]
-        +{abstract} call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
-        +{abstract} start(): None
-        +{abstract} stop(): None
-        +{abstract} reset(): None
-        +{abstract} save_state(): Mapping
-        +{abstract} load_state(state): None
-    }
 
-    abstract class StreamWorkbench {
-        +{abstract} call_tool_stream(name, arguments, cancellation_token, call_id): AsyncGenerator
-    }
-
-    class StaticWorkbench {
-        #_tools: List[BaseTool]
-        #_tool_overrides: Dict[str, ToolOverride]
-    }
-
-    class StaticStreamWorkbench {
-    }
+abstract class Workbench {
+    +{abstract} list_tools(): List[ToolSchema]
+    +{abstract} call_tool(name: str, arguments: Mapping, cancellation_token, call_id): ToolResult
+    +{abstract} start(): None
+    +{abstract} stop(): None
+    +{abstract} reset(): None
+    +{abstract} save_state(): Mapping
+    +{abstract} load_state(state): None
 }
+
+abstract class StreamWorkbench {
+    +{abstract} call_tool_stream(name, arguments, cancellation_token, call_id): AsyncGenerator
+}
+
+class StaticWorkbench {
+    #_tools: List[BaseTool]
+    #_tool_overrides: Dict[str, ToolOverride]
+}
+
+class StaticStreamWorkbench {
+}
+
 
 Workbench <|-- StaticWorkbench
 Component <|.. StaticWorkbench
@@ -247,65 +243,63 @@ class ImageResultContent {
 
 Workbench ..> ToolResult : produces
 
-' ============ MCP TOOLS (Extension) ============
-rectangle "MCP Tools Extension" #FFB1C1 {
-    class McpWorkbench {
-        +server_params: StdioServerParams | SseServerParams
-        +list_tools(): List[ToolSchema]
-        +call_tool(name, arguments, cancellation_token, call_id): ToolResult
-        +start(): None
-        +stop(): None
-    }
 
-    class StdioServerParams {
-        +command: str
-        +args: List[str]
-        +read_timeout_seconds: int
-    }
-
-    class SseServerParams {
-        +url: str
-    }
-
-    class StreamableHttpServerParams {
-        +url: str
-    }
+class McpWorkbench {
+    +server_params: StdioServerParams | SseServerParams
+    +list_tools(): List[ToolSchema]
+    +call_tool(name, arguments, cancellation_token, call_id): ToolResult
+    +start(): None
+    +stop(): None
 }
+
+class StdioServerParams {
+    +command: str
+    +args: List[str]
+    +read_timeout_seconds: int
+}
+
+class SseServerParams {
+    +url: str
+}
+
+class StreamableHttpServerParams {
+    +url: str
+}
+
 
 Workbench <|.. McpWorkbench
 McpWorkbench o-- StdioServerParams : uses
 McpWorkbench o-- SseServerParams : uses
 
-' ============ CODE EXECUTOR HIERARCHY ============
-rectangle "Code Executors" #90EE90 {
-    interface CodeExecutor <<Protocol>> {
-        +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
-        +{abstract} restart(): None
-        +{abstract} stop(): None
-    }
 
-    class LocalCommandLineCodeExecutor {
-        +work_dir: str
-    }
-
-    class DockerCommandLineCodeExecutor {
-        +work_dir: str
-        +image: str
-        +container_name: str
-        +device_requests: List[DeviceRequest]
-    }
-
-    class DockerJupyterCodeExecutor {
-        +work_dir: str
-        +jupyter_server: DockerJupyterServer
-    }
-
-    class JupyterCodeExecutor {
-    }
-
-    class ACADynamicSessionsCodeExecutor {
-    }
+interface CodeExecutor <<Protocol>> {
+    +{abstract} execute_code_blocks(code_blocks, cancellation_token): CodeResult
+    +{abstract} restart(): None
+    +{abstract} stop(): None
 }
+
+class LocalCommandLineCodeExecutor {
+    +work_dir: str
+}
+
+class DockerCommandLineCodeExecutor {
+    +work_dir: str
+    +image: str
+    +container_name: str
+    +device_requests: List[DeviceRequest]
+}
+
+class DockerJupyterCodeExecutor {
+    +work_dir: str
+    +jupyter_server: DockerJupyterServer
+}
+
+class JupyterCodeExecutor {
+}
+
+class ACADynamicSessionsCodeExecutor {
+}
+
 
 CodeExecutor <|.. LocalCommandLineCodeExecutor
 CodeExecutor <|.. DockerCommandLineCodeExecutor
@@ -325,19 +319,18 @@ class CodeResult {
 
 CodeExecutor ..> CodeResult : produces
 
-' ============ MEMORY HIERARCHY ============
-rectangle "Memory module" #ADD8E6 {
-    abstract class Memory {
-        +{abstract} query(query: str): MemoryQueryResult
-        +{abstract} add(content: MemoryContent): None
-        +{abstract} clear(): None
-        +{abstract} update_context(messages: List[LLMMessage]): UpdateContextResult
-    }
 
-    class ListMemory {
-        #_memory: List[MemoryContent]
-    }
+abstract class Memory {
+    +{abstract} query(query: str): MemoryQueryResult
+    +{abstract} add(content: MemoryContent): None
+    +{abstract} clear(): None
+    +{abstract} update_context(messages: List[LLMMessage]): UpdateContextResult
 }
+
+class ListMemory {
+    #_memory: List[MemoryContent]
+}
+
 
 Memory <|-- ListMemory
 
@@ -354,36 +347,35 @@ class UpdateContextResult {
     +system_message: SystemMessage | None
 }
 
-' ============ MODEL CONTEXT ============
-rectangle "Model Context layout" #E6E6FA {
-    abstract class ChatCompletionContext {
-        +{abstract} add_message(message: LLMMessage): None
-        +{abstract} get_messages(): List[LLMMessage]
-        +{abstract} clear(): None
-        +{abstract} save_state(): ChatCompletionContextState
-        +{abstract} load_state(state: ChatCompletionContextState): None
-    }
 
-    class UnboundedChatCompletionContext {
-        #_messages: List[LLMMessage]
-    }
-
-    class BufferedChatCompletionContext {
-        #_messages: List[LLMMessage]
-        #_buffer_size: int
-    }
-
-    class TokenLimitedChatCompletionContext {
-        #_messages: List[LLMMessage]
-        #_token_limit: int
-        #_model_client: ChatCompletionClient
-    }
-
-    class HeadAndTailChatCompletionContext {
-        #_head_size: int
-        #_tail_size: int
-    }
+abstract class ChatCompletionContext {
+    +{abstract} add_message(message: LLMMessage): None
+    +{abstract} get_messages(): List[LLMMessage]
+    +{abstract} clear(): None
+    +{abstract} save_state(): ChatCompletionContextState
+    +{abstract} load_state(state: ChatCompletionContextState): None
 }
+
+class UnboundedChatCompletionContext {
+    #_messages: List[LLMMessage]
+}
+
+class BufferedChatCompletionContext {
+    #_messages: List[LLMMessage]
+    #_buffer_size: int
+}
+
+class TokenLimitedChatCompletionContext {
+    #_messages: List[LLMMessage]
+    #_token_limit: int
+    #_model_client: ChatCompletionClient
+}
+
+class HeadAndTailChatCompletionContext {
+    #_head_size: int
+    #_tail_size: int
+}
+
 
 ChatCompletionContext <|-- UnboundedChatCompletionContext
 ChatCompletionContext <|-- BufferedChatCompletionContext
@@ -392,83 +384,82 @@ ChatCompletionContext <|-- HeadAndTailChatCompletionContext
 
 TokenLimitedChatCompletionContext o-- ChatCompletionClient : uses
 
-' ============ MESSAGE HIERARCHY (AgentChat) ============
-rectangle "AgentChat Messages" #LightGreen {
-    abstract class BaseMessage {
-        +source: str
-        +models_usage: RequestUsage | None
-        +metadata: Dict
-        +type: str
-    }
 
-    abstract class BaseChatMessage {
-        +{abstract} to_model_message(): LLMMessage
-    }
-
-    class TextMessage {
-        +content: str
-    }
-
-    class MultiModalMessage {
-        +content: List[str | Image]
-    }
-
-    class StopMessage {
-        +content: str
-    }
-
-    class HandoffMessage {
-        +target: str
-        +content: str
-        +context: List[BaseChatMessage]
-    }
-
-    class ToolCallSummaryMessage {
-        +content: str
-    }
-
-    class StructuredMessage<T> {
-        +content: T
-        +structured_output: T
-    }
-
-    abstract class BaseAgentEvent {
-    }
-
-    class ToolCallRequestEvent {
-        +content: List[FunctionCall]
-    }
-
-    class ToolCallExecutionEvent {
-        +content: List[FunctionExecutionResult]
-    }
-
-    class MemoryQueryEvent {
-    }
-
-    class UserInputRequestedEvent {
-    }
-
-    class ModelClientStreamingChunkEvent {
-        +content: str
-    }
-
-    class ThoughtEvent {
-        +content: str
-    }
-
-    class SelectSpeakerEvent {
-        +selected_speaker: str
-    }
-
-    class CodeGenerationEvent {
-        +code: str
-    }
-
-    class CodeExecutionEvent {
-        +result: CodeResult
-    }
+abstract class BaseMessage {
+    +source: str
+    +models_usage: RequestUsage | None
+    +metadata: Dict
+    +type: str
 }
+
+abstract class BaseChatMessage {
+    +{abstract} to_model_message(): LLMMessage
+}
+
+class TextMessage {
+    +content: str
+}
+
+class MultiModalMessage {
+    +content: List[str | Image]
+}
+
+class StopMessage {
+    +content: str
+}
+
+class HandoffMessage {
+    +target: str
+    +content: str
+    +context: List[BaseChatMessage]
+}
+
+class ToolCallSummaryMessage {
+    +content: str
+}
+
+class StructuredMessage<T> {
+    +content: T
+    +structured_output: T
+}
+
+abstract class BaseAgentEvent {
+}
+
+class ToolCallRequestEvent {
+    +content: List[FunctionCall]
+}
+
+class ToolCallExecutionEvent {
+    +content: List[FunctionExecutionResult]
+}
+
+class MemoryQueryEvent {
+}
+
+class UserInputRequestedEvent {
+}
+
+class ModelClientStreamingChunkEvent {
+    +content: str
+}
+
+class ThoughtEvent {
+    +content: str
+}
+
+class SelectSpeakerEvent {
+    +selected_speaker: str
+}
+
+class CodeGenerationEvent {
+    +code: str
+}
+
+class CodeExecutionEvent {
+    +result: CodeResult
+}
+
 
 BaseMessage <|-- BaseChatMessage
 BaseMessage <|-- BaseAgentEvent
@@ -488,59 +479,58 @@ BaseAgentEvent <|-- SelectSpeakerEvent
 BaseAgentEvent <|-- CodeGenerationEvent
 BaseAgentEvent <|-- CodeExecutionEvent
 
-' ============ BASE AGENT CLASS ============
-rectangle "Agents" #FFA07A {
-    interface ChatAgent <<Protocol>> {
-        +name: str
-        +description: str
-        +produced_message_types: Sequence[type]
-    }
 
-    abstract class BaseChatAgent {
-        #_name: str
-        #_description: str
-        +{abstract} produced_message_types: Sequence[type]
-        +{abstract} on_messages(messages, cancellation_token): Response
-        +on_messages_stream(messages, cancellation_token): AsyncGenerator
-        +{abstract} on_reset(cancellation_token): None
-        +run(task, cancellation_token): TaskResult
-        +run_stream(task, cancellation_token): AsyncGenerator
-        +save_state(): Mapping
-        +load_state(state): None
-    }
-
-    class AssistantAgent {
-        #_model_client: ChatCompletionClient
-        #_tools: List[BaseTool] | None
-        #_workbench: Workbench | List[Workbench] | None
-        #_handoffs: List[Handoff]
-        #_model_context: ChatCompletionContext
-        #_system_message: str | None
-        #_memory: List[Memory]
-        #_reflect_on_tool_use: bool
-        #_max_tool_iterations: int
-    }
-
-    class CodeExecutorAgent {
-        #_code_executor: CodeExecutor
-        #_model_client: ChatCompletionClient | None
-        #_model_context: ChatCompletionContext | None
-        #_approval_func: Callable | None
-    }
-
-    class UserProxyAgent {
-    }
-
-    class SocietyOfMindAgent {
-        #_model_client: ChatCompletionClient
-        #_model_context: ChatCompletionContext
-        #_team: Team
-    }
-
-    class MessageFilterAgent {
-        #_filters: List[PerSourceFilter]
-    }
+interface ChatAgent <<Protocol>> {
+    +name: str
+    +description: str
+    +produced_message_types: Sequence[type]
 }
+
+abstract class BaseChatAgent {
+    #_name: str
+    #_description: str
+    +{abstract} produced_message_types: Sequence[type]
+    +{abstract} on_messages(messages, cancellation_token): Response
+    +on_messages_stream(messages, cancellation_token): AsyncGenerator
+    +{abstract} on_reset(cancellation_token): None
+    +run(task, cancellation_token): TaskResult
+    +run_stream(task, cancellation_token): AsyncGenerator
+    +save_state(): Mapping
+    +load_state(state): None
+}
+
+class AssistantAgent {
+    #_model_client: ChatCompletionClient
+    #_tools: List[BaseTool] | None
+    #_workbench: Workbench | List[Workbench] | None
+    #_handoffs: List[Handoff]
+    #_model_context: ChatCompletionContext
+    #_system_message: str | None
+    #_memory: List[Memory]
+    #_reflect_on_tool_use: bool
+    #_max_tool_iterations: int
+}
+
+class CodeExecutorAgent {
+    #_code_executor: CodeExecutor
+    #_model_client: ChatCompletionClient | None
+    #_model_context: ChatCompletionContext | None
+    #_approval_func: Callable | None
+}
+
+class UserProxyAgent {
+}
+
+class SocietyOfMindAgent {
+    #_model_client: ChatCompletionClient
+    #_model_context: ChatCompletionContext
+    #_team: Team
+}
+
+class MessageFilterAgent {
+    #_filters: List[PerSourceFilter]
+}
+
 
 TaskRunner <|.. BaseChatAgent
 ChatAgent <|.. BaseChatAgent
@@ -588,61 +578,59 @@ class TaskResult {
 }
 
 ' ============ TERMINATION CONDITIONS ============
-rectangle "Termination Conditions" #FFB6C1 {
-    abstract class TerminationCondition {
-        +{abstract} terminated: bool
-        +{abstract} __call__(messages): StopMessage | None
-        +{abstract} reset(): None
-    }
+abstract class TerminationCondition {
+    +{abstract} terminated: bool
+    +{abstract} __call__(messages): StopMessage | None
+    +{abstract} reset(): None
+}
 
-    class MaxMessageTermination {
-        +max_messages: int
-    }
+class MaxMessageTermination {
+    +max_messages: int
+}
 
-    class TextMentionTermination {
-        +text: str
-    }
+class TextMentionTermination {
+    +text: str
+}
 
-    class HandoffTermination {
-    }
+class HandoffTermination {
+}
 
-    class TokenUsageTermination {
-        +max_tokens: int
-    }
+class TokenUsageTermination {
+    +max_tokens: int
+}
 
-    class ExternalTermination {
-    }
+class ExternalTermination {
+}
 
-    class TextMessageTermination {
-        +source: str
-    }
+class TextMessageTermination {
+    +source: str
+}
 
-    class FunctionCallTermination {
-        +function_name: str
-    }
+class FunctionCallTermination {
+    +function_name: str
+}
 
-    class SourceMatchTermination {
-        +source: str
-    }
+class SourceMatchTermination {
+    +source: str
+}
 
-    class StopMessageTermination {
-    }
+class StopMessageTermination {
+}
 
-    class TimeoutTermination {
-        +timeout_seconds: float
-    }
+class TimeoutTermination {
+    +timeout_seconds: float
+}
 
-    class FunctionalTermination {
-        +func: Callable
-    }
+class FunctionalTermination {
+    +func: Callable
+}
 
-    class OrTerminationCondition {
-        +conditions: List[TerminationCondition]
-    }
+class OrTerminationCondition {
+    +conditions: List[TerminationCondition]
+}
 
-    class AndTerminationCondition {
-        +conditions: List[TerminationCondition]
-    }
+class AndTerminationCondition {
+    +conditions: List[TerminationCondition]
 }
 
 ComponentBase <|.. TerminationCondition
@@ -666,34 +654,32 @@ OrTerminationCondition o-- TerminationCondition : contains
 AndTerminationCondition o-- TerminationCondition : contains
 
 ' ============ TEAM HIERARCHY ============
-rectangle "Teams" #D1F7F3 {
-    interface Team <<Protocol>> {
-        +name: str
-        +description: str
-        +run(task, cancellation_token): TaskResult
-        +run_stream(task, cancellation_token): AsyncGenerator
-        +reset(): None
-    }
+interface Team <<Protocol>> {
+    +name: str
+    +description: str
+    +run(task, cancellation_token): TaskResult
+    +run_stream(task, cancellation_token): AsyncGenerator
+    +reset(): None
+}
 
-    abstract class BaseGroupChat {
-        #_name: str
-        #_description: str
-        #_participants: List[ChatAgent]
-        #_termination_condition: TerminationCondition | None
-        #_max_turns: int | None
-    }
+abstract class BaseGroupChat {
+    #_name: str
+    #_description: str
+    #_participants: List[ChatAgent]
+    #_termination_condition: TerminationCondition | None
+    #_max_turns: int | None
+}
 
-    class RoundRobinGroupChat {
-    }
+class RoundRobinGroupChat {
+}
 
-    class SelectorGroupChat {
-    }
+class SelectorGroupChat {
+}
 
-    class Swarm {
-    }
+class Swarm {
+}
 
-    class MagenticOneGroupChat {
-    }
+class MagenticOneGroupChat {
 }
 
 TaskRunner <|.. Team
